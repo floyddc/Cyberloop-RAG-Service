@@ -4,7 +4,6 @@ from tqdm import tqdm
 import config
 from .embeddings import embed_texts
 
-_BATCH_SIZE = 128
 
 def _client() -> chromadb.PersistentClient:
     return chromadb.PersistentClient(path=config.INDICES_DIR)
@@ -37,9 +36,9 @@ def index_records(records: List[dict], reset: bool = False) -> int:
         unit="chunk",
     ) as progress:
 
-        for i in range(0, len(records), _BATCH_SIZE):
+        for i in range(0, len(records), config._BATCH_SIZE):
 
-            batch = records[i:i + _BATCH_SIZE]
+            batch = records[i:i + config._BATCH_SIZE]
 
             ids = [r["id"] for r in batch]
             texts = [r["text"] for r in batch]

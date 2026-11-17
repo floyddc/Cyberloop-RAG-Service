@@ -2,7 +2,7 @@ import os
 from typing import List
 import config
 
-_MAX_PROMPT_CHARS = 1600
+
 _model = None
 
 def _get_model():
@@ -18,10 +18,10 @@ def _get_model():
     return _model
 
 def _prepare_query(text: str) -> str:
-    return "query: " + text[:_MAX_PROMPT_CHARS]
+    return "query: " + text[:config._MAX_QUERY_CHARS]
 
 def _prepare_document(text: str) -> str:
-    return "passage: " + text[:_MAX_PROMPT_CHARS]
+    return "passage: " + text[:config._MAX_DOCUMENT_CHARS]
 
 
 def embed_texts(texts: List[str]) -> List[List[float]]:

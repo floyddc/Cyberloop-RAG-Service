@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS kb_documents (
 CREATE INDEX IF NOT EXISTS idx_kb_documents_category ON kb_documents (category);
 
 CREATE TABLE IF NOT EXISTS incident_history (
-    id SERIAL PRIMARY KEY,
+    id SERIAL NOT NULL,
+    customer_id INTEGER NOT NULL,
     incident_id INTEGER,               -- original id from the operational incident_registry database
     source TEXT,
     summary TEXT,
@@ -29,7 +30,8 @@ CREATE TABLE IF NOT EXISTS incident_history (
     lessons_learned TEXT,
     raw_payload JSONB,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (customer_id, id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_incident_history_created_at ON incident_history (created_at);

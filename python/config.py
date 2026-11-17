@@ -21,6 +21,9 @@ RERANK_SCORE_MARGIN = None
 RERANK_FUSION_WEIGHT = 1.0      
 LEXICAL_FUSION_WEIGHT = 1.5     
 CONTEXT_EXPAND_TOP = 1  
+_MAX_QUERY_CHARS = 1600
+_MAX_DOCUMENT_CHARS = 2600
+_BATCH_SIZE = 128
 
 # DIRECTORIES ----------------------------------------------------------------------------------------------------------------------------------------------------------     
 RAG_DIR = os.path.dirname(os.path.abspath(__file__))

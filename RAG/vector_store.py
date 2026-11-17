@@ -5,13 +5,20 @@ import config
 from .embeddings import embed_texts
 
 
+_generation = 0
+
+
 def _client() -> chromadb.PersistentClient:
     return chromadb.PersistentClient(path=config.INDICES_DIR)
+
+def index_generation() -> int:
+    return _generation
 
 def get_collection():
     return _client().get_or_create_collection(name=config.COLLECTION_NAME)
 
 def reset_collection():
+    global _generation
     client = _client()
 
     try:
@@ -19,10 +26,11 @@ def reset_collection():
     except chromadb.errors.NotFoundError:
         pass
 
+    _generation += 1
     return client.get_or_create_collection(name=config.COLLECTION_NAME)
 
 def index_records(records: List[dict], reset: bool = False) -> int:
-
+    global _generation
     collection = reset_collection() if reset else get_collection()
 
     if not records:
@@ -60,10 +68,12 @@ def index_records(records: List[dict], reset: bool = False) -> int:
             # Update global progress
             progress.update(len(batch))
 
+    _generation += 1
     return total
 
 
 def replace_source_records(source: str, records: List[dict]) -> int:
+    global _generation
     collection = get_collection()
     existing = collection.get(where={"source": source})
     existing_ids = set(existing.get("ids", []))
@@ -72,4 +82,5 @@ def replace_source_records(source: str, records: List[dict]) -> int:
     stale_ids = existing_ids.difference(current.get("ids", []))
     if stale_ids:
         collection.delete(ids=sorted(stale_ids))
+        _generation += 1
     return indexed

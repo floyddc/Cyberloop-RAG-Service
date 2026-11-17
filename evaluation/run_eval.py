@@ -267,12 +267,14 @@ def _format_query_diagnostic(
                 "id",
                 "source",
                 "title",
+                "origin",
                 "distance",
                 "rerank_score",
                 "fused_score",
                 "vector_rank",
                 "rerank_rank",
                 "lexical_rank",
+                "lexical_corpus_rank",
                 "fused_rank",
                 "returned_rank",
             )
@@ -309,9 +311,11 @@ def _format_query_diagnostic(
                         for key in (
                             "id",
                             "title",
+                            "origin",
                             "vector_rank",
                             "rerank_rank",
                             "lexical_rank",
+                            "lexical_corpus_rank",
                             "fused_rank",
                             "returned_rank",
                         )
@@ -323,6 +327,7 @@ def _format_query_diagnostic(
     return {
         "query_id": query["id"],
         "candidate_count": kb_trace.get("candidate_count", len(candidates)),
+        "lexical_added": kb_trace.get("lexical_added", 0),
         "candidates": candidate_summaries,
         "judgments": judgment_diagnostics,
     }

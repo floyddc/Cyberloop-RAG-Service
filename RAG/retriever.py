@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import re
@@ -5,11 +6,14 @@ from collections import Counter
 from typing import Dict, List, Literal, Optional, Tuple
 import config
 from .embeddings import embed_query
+from .lexical import LexicalIndex, LexicalIndexCache
 from .reranker import rerank
 from .text_cleaner import clean_retrieval_text, split_sentences
-from .vector_store import get_collection
+from .vector_store import get_collection, index_generation
 
 logger = logging.getLogger(__name__)
+
+_lexical_cache = LexicalIndexCache()
 
 
 def _diversity_key(hit: dict) -> str:
@@ -73,6 +77,65 @@ def lexical_rank(query: str, hits: List[dict]) -> List[dict]:
         hit["lexical_score"] = score
         hit["lexical_rank"] = rank
     return [hit for _, _, hit in scores]
+
+
+def _load_lexical_index(collection, where: dict) -> LexicalIndex:
+    data = collection.get(where=where, include=["documents", "metadatas"])
+    texts = [document or "" for document in data["documents"]]
+    metadatas = [metadata or {} for metadata in data["metadatas"]]
+    keys = [_hit_key({"text": text, "metadata": metadata}) for text, metadata in zip(texts, metadatas)]
+    return LexicalIndex(keys, texts, metadatas)
+
+
+def _get_lexical_index(collection, where: dict) -> Optional[LexicalIndex]:
+    # the lexical search only adds candidates: if it cannot run, vector retrieval still works
+    if config.LEXICAL_CANDIDATES <= 0:
+        return None
+    try:
+        return _lexical_cache.get(
+            json.dumps(where, sort_keys=True),
+            (collection.count(), index_generation()),
+            config.LEXICAL_INDEX_TTL_SECONDS,
+            lambda: _load_lexical_index(collection, where),
+        )
+    except Exception:
+        logger.warning("Lexical index unavailable; using vector candidates only", exc_info=True)
+        return None
+
+
+def lexical_candidates(
+    index: LexicalIndex,
+    query: str,
+    known_keys: set,
+    limit: int,
+) -> Tuple[List[dict], List[Tuple[int, float]]]:
+    """Top BM25 chunks of the whole collection that the vector search did not return."""
+    ranking = index.search(query)
+    added: List[dict] = []
+    for position, score in ranking:
+        if len(added) >= limit:
+            break
+        key = index.keys[position]
+        if key in known_keys:
+            continue
+        text = clean_retrieval_text(index.texts[position])
+        if not text:
+            continue
+        known_keys.add(key)
+        added.append({"text": text, "metadata": index.metadatas[position], "distance": None})
+    return added, ranking
+
+
+def order_by_lexical_score(pool: List[dict], index: LexicalIndex, ranking: List[Tuple[int, float]]) -> List[dict]:
+    scores = dict(ranking)
+    scored = []
+    for original_rank, hit in enumerate(pool):
+        position = index.position_of(_hit_key(hit))
+        score = scores.get(position, 0.0) if position is not None else 0.0
+        hit["lexical_score"] = score
+        scored.append((score, original_rank, hit))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [hit for _, _, hit in scored]
 
 
 def select_hits(
@@ -237,9 +300,21 @@ def _retrieve(
         if cleaned_doc:
             hits.append({"text": cleaned_doc, "metadata": meta, "distance": dist})
 
-    # reranking
-    reranked_hits = rerank(query, hits, top_k=len(hits))
-    lexical_hits = lexical_rank(query, hits)
+    # reranking: vector candidates plus the best chunks of a BM25 search over the whole collection
+    vector_keys = {_hit_key(hit) for hit in hits}
+    lexical_index = _get_lexical_index(collection, where)
+    lexical_only: List[dict] = []
+    lexical_ranking: List[Tuple[int, float]] = []
+    if lexical_index is not None:
+        lexical_only, lexical_ranking = lexical_candidates(
+            lexical_index, query, set(vector_keys), config.LEXICAL_CANDIDATES
+        )
+    pool = hits + lexical_only
+    reranked_hits = rerank(query, pool, top_k=len(pool))
+    if lexical_index is not None:
+        lexical_hits = order_by_lexical_score(pool, lexical_index, lexical_ranking)
+    else:
+        lexical_hits = lexical_rank(query, pool)
     fused_hits = fuse_rankings(hits, reranked_hits, lexical_hits)
     ranked_hits = select_hits(fused_hits, top_k)
     expand_hits(collection, ranked_hits, config.CONTEXT_EXPAND_TOP)
@@ -257,27 +332,42 @@ def _retrieve(
         returned_ranks = {
             _hit_key(hit): rank for rank, hit in enumerate(ranked_hits, start=1)
         }
+        corpus_lexical_ranks = {}
+        if lexical_index is not None:
+            position_ranks = {position: rank for rank, (position, _) in enumerate(lexical_ranking, start=1)}
+            corpus_lexical_ranks = {
+                key: position_ranks.get(lexical_index.position_of(key))
+                for key in (_hit_key(hit) for hit in pool)
+            }
         candidates = []
-        for hit in hits:
+        for hit in pool:
             key = _hit_key(hit)
             metadata = hit["metadata"]
             candidate = {
                 "id": key,
                 "source": metadata.get("source", ""),
                 "title": metadata.get("title") or metadata.get("source", ""),
-                "distance": float(hit["distance"]),
+                "origin": "vector" if key in vector_ranks else "lexical",
+                "distance": None if hit["distance"] is None else float(hit["distance"]),
                 "rerank_score": hit.get("rerank_score"),
                 "fused_score": hit.get("fused_score"),
-                "vector_rank": vector_ranks[key],
+                "vector_rank": vector_ranks.get(key),
                 "rerank_rank": rerank_ranks.get(key),
                 "lexical_rank": lexical_ranks.get(key),
+                "lexical_corpus_rank": corpus_lexical_ranks.get(key),
                 "fused_rank": fused_ranks.get(key),
                 "returned_rank": returned_ranks.get(key),
             }
             if result_kind == "kb":
                 candidate["text"] = hit["text"]
             candidates.append(candidate)
-        diagnostics.update({"candidate_count": len(candidates), "candidates": candidates})
+        diagnostics.update(
+            {
+                "candidate_count": len(candidates),
+                "lexical_added": len(lexical_only),
+                "candidates": candidates,
+            }
+        )
 
     return ranked_hits
 

@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS incident_history (
     raw_payload JSONB,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (customer_id, id)
+    PRIMARY KEY (customer_id, id),
+    UNIQUE (id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_incident_history_created_at ON incident_history (created_at);

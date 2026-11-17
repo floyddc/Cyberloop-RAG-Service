@@ -40,7 +40,9 @@ def _history_documents(rows: List[Dict[str, Any]]) -> List[SourceDocument]:
     documents: List[SourceDocument] = []
     for row in rows:
         metadata = row.get("metadata") or {}
-        customer = metadata.get("customer") if isinstance(metadata, dict) else None
+        if not isinstance(metadata, dict):
+            raise ValueError(f"Incident history record {row['id']} has invalid metadata")
+        customer = row.get("customer_id")
         if isinstance(customer, bool) or not isinstance(customer, int) or customer <= 0:
             continue
 

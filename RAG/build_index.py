@@ -16,8 +16,7 @@ def main(reset: bool = False):
     records = build_chunks(documents)
     skipped_history = 0
     for row in history_rows:
-        metadata = row.get("metadata")
-        customer = metadata.get("customer") if isinstance(metadata, dict) else None
+        customer = row.get("customer_id")
         if isinstance(customer, bool) or not isinstance(customer, int) or customer <= 0:
             skipped_history += 1
     print(
@@ -25,7 +24,7 @@ def main(reset: bool = False):
         f"{len(history_rows)} new incident history records."
     )
     if skipped_history:
-        print(f"Skipped {skipped_history} history records without valid customer metadata; they are excluded from retrieval until assigned and reindexed.")
+        print(f"Skipped {skipped_history} history records without a valid customer_id; they are excluded from retrieval until assigned and reindexed.")
 
     if records:
         total = index_records(records)

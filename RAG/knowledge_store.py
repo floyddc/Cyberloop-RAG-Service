@@ -63,6 +63,7 @@ class IncidentHistoryStore:
             raise ValueError("case_id must be a positive integer")
 
         values = (
+            customer_id,
             json.dumps({"customer": customer_id}),
             title,
             text,
@@ -73,8 +74,8 @@ class IncidentHistoryStore:
                 cur.execute(
                     """
                     INSERT INTO incident_history
-                        (source, metadata, summary, description, raw_payload)
-                    VALUES ('http-api', %s, %s, %s, %s)
+                        (customer_id, source, metadata, summary, description, raw_payload)
+                    VALUES (%s, 'http-api', %s, %s, %s, %s)
                     RETURNING id
                     """,
                     values,
@@ -83,10 +84,11 @@ class IncidentHistoryStore:
                 cur.execute(
                     """
                     INSERT INTO incident_history
-                        (id, source, metadata, summary, description, raw_payload)
-                    VALUES (%s, 'http-api', %s, %s, %s, %s)
+                        (id, customer_id, source, metadata, summary, description, raw_payload)
+                    VALUES (%s, %s, 'http-api', %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE
-                    SET source = EXCLUDED.source,
+                    SET customer_id = EXCLUDED.customer_id,
+                        source = EXCLUDED.source,
                         metadata = EXCLUDED.metadata,
                         summary = EXCLUDED.summary,
                         description = EXCLUDED.description,
@@ -132,11 +134,12 @@ class IncidentHistoryStore:
             cur.execute(
                 """
                 INSERT INTO incident_history
-                    (incident_id, source, metadata, summary, description, severity, resolution, lessons_learned, raw_payload)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (customer_id, incident_id, source, metadata, summary, description, severity, resolution, lessons_learned, raw_payload)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
+                    customer_id,
                     incident_id,
                     source,
                     json.dumps({"customer": customer_id}),

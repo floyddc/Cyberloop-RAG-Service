@@ -7,7 +7,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
-from .metrics import MATCH_FIELDS, mean_metrics, score_ranking
+from .metrics import MATCH_FIELDS, matches, mean_metrics, score_ranking
 
 DEFAULT_DATASET = Path(__file__).with_name("dataset.json")
 DEFAULT_URL = "http://localhost:8000"
@@ -18,6 +18,7 @@ MAX_CASES_PER_REQUEST = 100  # upper bound accepted by POST /index/cases
 LABELS = {"case": "Historical cases", "kb": "Knowledge base", "all": "All"}
 
 Retrieve = Callable[[Mapping[str, Any], int, int], List[dict]]
+RetrieveWithDiagnostics = Callable[[Mapping[str, Any], int, int], Mapping[str, Any]]
 
 
 def _positive_int(value: Any) -> bool:
@@ -142,6 +143,24 @@ class ServiceClient:
             body["query"] = query["query"]
         return self._request("POST", "/retrieve", body)
 
+    def retrieve_with_diagnostics(
+        self,
+        query: Mapping[str, Any],
+        k_cases: int,
+        k_kb: int,
+    ) -> Mapping[str, Any]:
+        body: Dict[str, Any] = {
+            "customer": query["customer"],
+            "query_id": query["id"],
+            "k_cases": k_cases,
+            "k_kb": k_kb,
+        }
+        if "alert" in query:
+            body["alert"] = query["alert"]
+        else:
+            body["query"] = query["query"]
+        return self._request("POST", "/retrieve/diagnostics", body)
+
     def index_cases(self, cases: Sequence[Mapping[str, Any]]) -> List[int]:
         ids = self._request("POST", "/index/cases", {"cases": list(cases)})["ids"]
         if len(ids) != len(cases):
@@ -177,24 +196,31 @@ def _summarize(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def evaluate(queries: Sequence[Mapping[str, Any]], retrieve: Retrieve, ks: Sequence[int]) -> Dict[str, Any]:
-    """Run every query once and score each result kind (case / kb) as its own ranking.
-
-    The service is asked for the deepest cutoff only; smaller cutoffs are slices of that
-    ranking, which holds while the deepest cutoff stays within RERANK_CANDIDATES.
-    """
+def evaluate(
+    queries: Sequence[Mapping[str, Any]],
+    retrieve: Retrieve,
+    ks: Sequence[int],
+    diagnostics_retrieve: Optional[RetrieveWithDiagnostics] = None,
+) -> Dict[str, Any]:
     deepest = max(ks)
     rows: List[Dict[str, Any]] = []
+    diagnostic_rows: List[dict] = []
     for query in queries:
         judgments = {
             kind: [judgment for judgment in query["relevant"] if judgment["type"] == kind]
             for kind in KINDS
         }
-        results = retrieve(
-            query,
-            deepest if judgments["case"] else 0,
-            deepest if judgments["kb"] else 0,
-        )
+        k_cases = deepest if judgments["case"] else 0
+        k_kb = deepest if judgments["kb"] else 0
+        diagnostic_response = None
+        if diagnostics_retrieve is None:
+            results = retrieve(query, k_cases, k_kb)
+        else:
+            diagnostic_response = diagnostics_retrieve(query, k_cases, k_kb)
+            results = diagnostic_response["results"]
+            diagnostic_rows.append(
+                _format_query_diagnostic(query, judgments["kb"], diagnostic_response)
+            )
         for kind in KINDS:
             if not judgments[kind]:
                 continue
@@ -221,7 +247,85 @@ def evaluate(queries: Sequence[Mapping[str, Any]], retrieve: Retrieve, ks: Seque
         if any(row["kind"] == kind for row in rows)
     }
     summary["all"] = _summarize(rows)
-    return {"ks": list(ks), "summary": summary, "queries": rows}
+    report = {"ks": list(ks), "summary": summary, "queries": rows}
+    if diagnostics_retrieve is not None:
+        report["diagnostics"] = diagnostic_rows
+    return report
+
+
+def _format_query_diagnostic(
+    query: Mapping[str, Any],
+    judgments: Sequence[Mapping[str, Any]],
+    response: Mapping[str, Any],
+) -> dict:
+    kb_trace = response.get("diagnostics", {}).get("kb", {})
+    candidates = kb_trace.get("candidates", [])
+    candidate_summaries = [
+        {
+            key: candidate.get(key)
+            for key in (
+                "id",
+                "source",
+                "title",
+                "distance",
+                "rerank_score",
+                "fused_score",
+                "vector_rank",
+                "rerank_rank",
+                "lexical_rank",
+                "fused_rank",
+                "returned_rank",
+            )
+        }
+        for candidate in candidates
+    ]
+    judgment_diagnostics = []
+    for judgment in judgments:
+        matched_candidates = [
+            candidate for candidate in candidates
+            if matches(
+                {
+                    "type": "kb",
+                    "id": candidate["id"],
+                    "title": candidate.get("title", ""),
+                    "text": candidate.get("text", ""),
+                },
+                judgment,
+            )
+        ]
+        if any(candidate.get("returned_rank") is not None for candidate in matched_candidates):
+            status = "returned"
+        elif matched_candidates:
+            status = "candidate_not_returned"
+        else:
+            status = "not_in_candidate_pool"
+        judgment_diagnostics.append(
+            {
+                "judgment": dict(judgment),
+                "status": status,
+                "matching_candidates": [
+                    {
+                        key: candidate.get(key)
+                        for key in (
+                            "id",
+                            "title",
+                            "vector_rank",
+                            "rerank_rank",
+                            "lexical_rank",
+                            "fused_rank",
+                            "returned_rank",
+                        )
+                    }
+                    for candidate in matched_candidates
+                ],
+            }
+        )
+    return {
+        "query_id": query["id"],
+        "candidate_count": kb_trace.get("candidate_count", len(candidates)),
+        "candidates": candidate_summaries,
+        "judgments": judgment_diagnostics,
+    }
 
 
 def _describe(judgment: Mapping[str, Any]) -> str:
@@ -266,6 +370,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--timeout", type=float, default=120, help="Per-request timeout in seconds")
     parser.add_argument("--output", type=Path, help="Write the full report as JSON")
+    parser.add_argument(
+        "--diagnostics",
+        type=Path,
+        help="Write candidate/ranking diagnostics as JSONL (requires the test-only diagnostics endpoint)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -287,7 +396,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         if args.seed_cases:
             seed_cases(client, fixtures, seeded)
-        report = evaluate(dataset["queries"], client.retrieve, ks)
+        report = evaluate(
+            dataset["queries"],
+            client.retrieve,
+            ks,
+            diagnostics_retrieve=client.retrieve_with_diagnostics if args.diagnostics else None,
+        )
     except RuntimeError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -296,7 +410,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     print(format_report(report))
     if args.output:
-        args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        args.output.write_text(
+            json.dumps({key: value for key, value in report.items() if key != "diagnostics"},
+                       ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    if args.diagnostics:
+        args.diagnostics.write_text(
+            "".join(
+                json.dumps(row, ensure_ascii=False) + "\n"
+                for row in report["diagnostics"]
+            ),
+            encoding="utf-8",
+        )
+        print(f"Retrieval diagnostics written to {args.diagnostics}")
     return 0
 
 

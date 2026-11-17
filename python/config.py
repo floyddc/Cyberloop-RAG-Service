@@ -16,6 +16,9 @@ CHUNK_SIZE = 300
 CHUNK_OVERLAP = 50
 TOP_K = 5
 RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "10"))
+RETRIEVAL_DIAGNOSTICS_ENABLED = os.environ.get(
+    "RETRIEVAL_DIAGNOSTICS_ENABLED", ""
+).strip().lower() in {"1", "true", "yes"}
 RERANK_MIN_SCORE = None         
 RERANK_SCORE_MARGIN = None      
 RERANK_FUSION_WEIGHT = 1.0      

@@ -2,7 +2,7 @@ import logging
 import math
 import re
 from collections import Counter
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 import config
 from .embeddings import embed_query
 from .reranker import rerank
@@ -169,6 +169,27 @@ def retrieve(
     top_k: int = config.TOP_K,
     result_kind: Optional[Literal["case", "kb"]] = None,
 ) -> List[dict]:
+    return _retrieve(query, customer_id, top_k, result_kind)
+
+
+def retrieve_with_diagnostics(
+    query: str,
+    customer_id: int,
+    top_k: int = config.TOP_K,
+    result_kind: Optional[Literal["case", "kb"]] = None,
+) -> Tuple[List[dict], dict]:
+    diagnostics: dict = {}
+    hits = _retrieve(query, customer_id, top_k, result_kind, diagnostics)
+    return hits, diagnostics
+
+
+def _retrieve(
+    query: str,
+    customer_id: int,
+    top_k: int,
+    result_kind: Optional[Literal["case", "kb"]],
+    diagnostics: Optional[dict] = None,
+) -> List[dict]:
     if isinstance(customer_id, bool) or not isinstance(customer_id, int) or customer_id <= 0:
         raise ValueError("customer_id must be a positive integer for tenant-scoped retrieval")
 
@@ -176,6 +197,8 @@ def retrieve(
     collection = get_collection()
 
     if collection.count() == 0:
+        if diagnostics is not None:
+            diagnostics.update({"candidate_count": 0, "candidates": []})
         return []
 
     candidate_k = min(max(top_k, config.RERANK_CANDIDATES), collection.count())
@@ -220,6 +243,41 @@ def retrieve(
     fused_hits = fuse_rankings(hits, reranked_hits, lexical_hits)
     ranked_hits = select_hits(fused_hits, top_k)
     expand_hits(collection, ranked_hits, config.CONTEXT_EXPAND_TOP)
+    if diagnostics is not None:
+        vector_ranks = {_hit_key(hit): rank for rank, hit in enumerate(hits, start=1)}
+        rerank_ranks = {
+            _hit_key(hit): rank for rank, hit in enumerate(reranked_hits, start=1)
+        }
+        lexical_ranks = {
+            _hit_key(hit): rank for rank, hit in enumerate(lexical_hits, start=1)
+        }
+        fused_ranks = {
+            _hit_key(hit): rank for rank, hit in enumerate(fused_hits, start=1)
+        }
+        returned_ranks = {
+            _hit_key(hit): rank for rank, hit in enumerate(ranked_hits, start=1)
+        }
+        candidates = []
+        for hit in hits:
+            key = _hit_key(hit)
+            metadata = hit["metadata"]
+            candidate = {
+                "id": key,
+                "source": metadata.get("source", ""),
+                "title": metadata.get("title") or metadata.get("source", ""),
+                "distance": float(hit["distance"]),
+                "rerank_score": hit.get("rerank_score"),
+                "fused_score": hit.get("fused_score"),
+                "vector_rank": vector_ranks[key],
+                "rerank_rank": rerank_ranks.get(key),
+                "lexical_rank": lexical_ranks.get(key),
+                "fused_rank": fused_ranks.get(key),
+                "returned_rank": returned_ranks.get(key),
+            }
+            if result_kind == "kb":
+                candidate["text"] = hit["text"]
+            candidates.append(candidate)
+        diagnostics.update({"candidate_count": len(candidates), "candidates": candidates})
 
     return ranked_hits
 
@@ -230,6 +288,28 @@ def retrieve_results(
     k_cases: int,
     k_kb: int,
 ) -> List[dict]:
+    results, _ = _retrieve_results(query, customer_id, k_cases, k_kb)
+    return results
+
+
+def retrieve_results_with_diagnostics(
+    query: str,
+    customer_id: int,
+    k_cases: int,
+    k_kb: int,
+) -> Tuple[List[dict], Dict[str, dict]]:
+    diagnostics: Dict[str, dict] = {}
+    results, _ = _retrieve_results(query, customer_id, k_cases, k_kb, diagnostics)
+    return results, diagnostics
+
+
+def _retrieve_results(
+    query: str,
+    customer_id: int,
+    k_cases: int,
+    k_kb: int,
+    diagnostics: Optional[Dict[str, dict]] = None,
+) -> Tuple[List[dict], Dict[str, dict]]:
     if isinstance(customer_id, bool) or not isinstance(customer_id, int) or customer_id <= 0:
         raise ValueError("customer_id must be a positive integer for tenant-scoped retrieval")
     if not isinstance(query, str) or not query.strip():
@@ -242,12 +322,21 @@ def retrieve_results(
     for result_kind, limit in (("case", k_cases), ("kb", k_kb)):
         if limit == 0:
             continue
-        hits = retrieve(
-            query,
-            customer_id=customer_id,
-            top_k=limit,
-            result_kind=result_kind,
-        )
+        if diagnostics is None:
+            hits = retrieve(
+                query,
+                customer_id=customer_id,
+                top_k=limit,
+                result_kind=result_kind,
+            )
+        else:
+            hits, kind_diagnostics = retrieve_with_diagnostics(
+                query,
+                customer_id=customer_id,
+                top_k=limit,
+                result_kind=result_kind,
+            )
+            diagnostics[result_kind] = kind_diagnostics
         for hit in hits:
             metadata = hit["metadata"]
             record_id = metadata.get("record_id")
@@ -267,4 +356,4 @@ def retrieve_results(
                 }
             )
 
-    return sorted(results, key=lambda result: result["score"], reverse=True)
+    return sorted(results, key=lambda result: result["score"], reverse=True), diagnostics or {}

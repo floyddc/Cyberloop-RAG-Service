@@ -2,7 +2,10 @@
 import json
 import re
 import config
-from RAG.retriever import retrieve_results as retrieve_rag_results
+from RAG.retriever import (
+    retrieve_results as retrieve_rag_results,
+    retrieve_results_with_diagnostics as retrieve_rag_results_with_diagnostics,
+)
 
 
 class RetrieveAgent:
@@ -15,6 +18,20 @@ class RetrieveAgent:
         k_kb: int,
     ) -> list[dict]:
         return retrieve_rag_results(
+            self._incident_to_query(incident_or_query, semantic=True),
+            customer_id=customer_id,
+            k_cases=k_cases,
+            k_kb=k_kb,
+        )
+
+    def retrieve_with_diagnostics(
+        self,
+        incident_or_query: Any,
+        customer_id: int,
+        k_cases: int,
+        k_kb: int,
+    ) -> tuple[list[dict], dict[str, dict]]:
+        return retrieve_rag_results_with_diagnostics(
             self._incident_to_query(incident_or_query, semantic=True),
             customer_id=customer_id,
             k_cases=k_cases,

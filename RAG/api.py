@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal, Optional
 from fastapi import FastAPI, HTTPException, Path
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+import config
 from python.retrieve_agent import RetrieveAgent
 from .embeddings import embed_query
 from .reranker import warmup as warmup_reranker
@@ -49,6 +50,10 @@ class RetrieveRequest(BaseModel):
                     raise ValueError("customer must match alert.alert_customer_id")
 
         return self
+
+
+class RetrieveDiagnosticsRequest(RetrieveRequest):
+    query_id: str = Field(min_length=1, max_length=100)
 
 
 class CaseInput(BaseModel):
@@ -129,6 +134,30 @@ def retrieve(request: RetrieveRequest) -> list[dict]:
         k_cases=request.k_cases,
         k_kb=request.k_kb,
     )
+
+
+@app.post("/retrieve/diagnostics")
+def retrieve_diagnostics(request: RetrieveDiagnosticsRequest) -> dict:
+    if not config.RETRIEVAL_DIAGNOSTICS_ENABLED:
+        raise HTTPException(status_code=404, detail="Retrieval diagnostics are disabled")
+    _require_ready()
+    incident_or_query = request.alert if request.alert is not None else request.query
+    if incident_or_query is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide exactly one of 'query' or 'alert'",
+        )
+    results, diagnostics = RetrieveAgent().retrieve_with_diagnostics(
+        incident_or_query,
+        customer_id=request.customer,
+        k_cases=request.k_cases,
+        k_kb=request.k_kb,
+    )
+    return {
+        "query_id": request.query_id,
+        "results": results,
+        "diagnostics": diagnostics,
+    }
 
 
 @app.post("/index/cases")

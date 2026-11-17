@@ -1,5 +1,5 @@
 {
-  "description": "Retrieval quality dataset. Judgments locate results by title/text because KB ids are DB serials. Grades: 2 = primary answer, 1 = useful supporting context. MITRE technique titles look like 'T1110 - Brute Force', so the trailing ' - ' keeps a technique from matching its sub-techniques.",
+  "description": "Retrieval quality dataset. Judgments locate results by title/text because KB ids are DB serials; MITRE techniques use the canonical technique_id matcher. Grades: 2 = primary answer, 1 = useful supporting context.",
   "fixture_cases": [
     {
       "customer": 900001,
@@ -60,8 +60,8 @@
       },
       "relevant": [
         {"type": "case", "title_contains": "Ransomware encrypted departmental file shares", "grade": 2},
-        {"type": "kb", "title_contains": "T1486 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1490 - ", "grade": 1}
+        {"type": "kb", "technique_id": "T1486", "grade": 2},
+        {"type": "kb", "technique_id": "T1490", "grade": 1}
       ]
     },
     {
@@ -70,9 +70,9 @@
       "query": "user enabled macros in an emailed invoice document and powershell downloaded a payload",
       "relevant": [
         {"type": "case", "title_contains": "Phishing invoice with macro-enabled document", "grade": 2},
-        {"type": "kb", "title_contains": "T1566.001 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1059.001 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1204.002 - ", "grade": 1}
+        {"type": "kb", "technique_id": "T1566.001", "grade": 2},
+        {"type": "kb", "technique_id": "T1059.001", "grade": 2},
+        {"type": "kb", "technique_id": "T1204.002", "grade": 1}
       ]
     },
     {
@@ -85,8 +85,8 @@
       },
       "relevant": [
         {"type": "case", "title_contains": "Credential dumping against LSASS", "grade": 2},
-        {"type": "kb", "title_contains": "T1003.001 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1218.011 - ", "grade": 1}
+        {"type": "kb", "technique_id": "T1003.001", "grade": 2},
+        {"type": "kb", "technique_id": "T1218.011", "grade": 1}
       ]
     },
     {
@@ -95,8 +95,8 @@
       "query": "many failed vpn logins from different ip addresses then one successful login",
       "relevant": [
         {"type": "case", "title_contains": "VPN gateway password guessing", "grade": 2},
-        {"type": "kb", "title_contains": "T1110 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1110.003 - ", "grade": 1}
+        {"type": "kb", "technique_id": "T1110", "grade": 2},
+        {"type": "kb", "technique_id": "T1110.003", "grade": 1}
       ]
     },
     {
@@ -109,8 +109,8 @@
       },
       "relevant": [
         {"type": "case", "title_contains": "HTTPS beaconing to a newly registered domain", "grade": 2},
-        {"type": "kb", "title_contains": "T1071.001 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1573 - ", "grade": 1}
+        {"type": "kb", "technique_id": "T1071.001", "grade": 2},
+        {"type": "kb", "technique_id": "T1573", "grade": 1}
       ]
     },
     {
@@ -119,8 +119,8 @@
       "query": "gigabytes of internal documents uploaded to personal cloud storage with rclone",
       "relevant": [
         {"type": "case", "title_contains": "Large upload of company documents", "grade": 2},
-        {"type": "kb", "title_contains": "T1567.002 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1048 - ", "grade": 1}
+        {"type": "kb", "technique_id": "T1567.002", "grade": 2},
+        {"type": "kb", "technique_id": "T1048", "grade": 1}
       ]
     },
     {
@@ -129,7 +129,7 @@
       "query": "new scheduled task launching a script from appdata at logon after installer execution",
       "relevant": [
         {"type": "case", "title_contains": "Persistence through a scheduled task", "grade": 2},
-        {"type": "kb", "title_contains": "T1053.005 - ", "grade": 2},
+        {"type": "kb", "technique_id": "T1053.005", "grade": 2},
         {"type": "kb", "text_contains": "disable_persistence", "grade": 1}
       ]
     },
@@ -143,7 +143,7 @@
       },
       "relevant": [
         {"type": "case", "title_contains": "Internal vulnerability scanner flagged", "grade": 2},
-        {"type": "kb", "title_contains": "T1046 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1046", "grade": 2}
       ]
     },
     {
@@ -155,8 +155,8 @@
         "alert_customer_id": 900001
       },
       "relevant": [
-        {"type": "kb", "title_contains": "T1059.001 - ", "grade": 2},
-        {"type": "kb", "title_contains": "T1027 - ", "grade": 1},
+        {"type": "kb", "technique_id": "T1059.001", "grade": 2},
+        {"type": "kb", "technique_id": "T1027", "grade": 1},
         {"type": "kb", "text_contains": "audit_power_shell_executions", "grade": 1}
       ]
     },
@@ -165,7 +165,7 @@
       "customer": 900001,
       "query": "registry run key modified to launch an executable at user logon",
       "relevant": [
-        {"type": "kb", "title_contains": "T1547.001 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1547.001", "grade": 2}
       ]
     },
     {
@@ -173,7 +173,7 @@
       "customer": 900001,
       "query": "remote desktop session opened from an external ip address to a server",
       "relevant": [
-        {"type": "kb", "title_contains": "T1021.001 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1021.001", "grade": 2}
       ]
     },
     {
@@ -181,7 +181,7 @@
       "customer": 900001,
       "query": "legitimate signed binary loading a malicious dll from its own folder",
       "relevant": [
-        {"type": "kb", "title_contains": "T1574.002 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1574.002", "grade": 2}
       ]
     },
     {
@@ -189,7 +189,7 @@
       "customer": 900001,
       "query": "ntlm hash reused to authenticate to another host without knowing the password",
       "relevant": [
-        {"type": "kb", "title_contains": "T1550.002 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1550.002", "grade": 2}
       ]
     },
     {
@@ -197,7 +197,7 @@
       "customer": 900001,
       "query": "service ticket requests for many service principal names using rc4 encryption",
       "relevant": [
-        {"type": "kb", "title_contains": "T1558.003 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1558.003", "grade": 2}
       ]
     },
     {
@@ -205,7 +205,7 @@
       "customer": 900001,
       "query": "process wrote code into the memory of another running process and created a remote thread",
       "relevant": [
-        {"type": "kb", "title_contains": "T1055 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1055", "grade": 2}
       ]
     },
     {
@@ -213,7 +213,7 @@
       "customer": 900001,
       "query": "windows security event log cleared unexpectedly by an administrator account",
       "relevant": [
-        {"type": "kb", "title_contains": "T1070.001 - ", "grade": 2}
+        {"type": "kb", "technique_id": "T1070.001", "grade": 2}
       ]
     },
     {

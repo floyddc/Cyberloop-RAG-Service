@@ -1,7 +1,23 @@
+import re
 from math import log2
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
-MATCH_FIELDS = ("id", "title_contains", "text_contains")
+MATCH_FIELDS = ("id", "title_contains", "text_contains", "technique_id")
+_TECHNIQUE_ID_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])T(\d{4})(?:[._](\d{3}))?(?![A-Za-z0-9._])",
+    re.IGNORECASE,
+)
+
+
+def _canonical_technique_id(value: str) -> str:
+    return value.upper().replace("_", ".")
+
+
+def _title_technique_ids(title: str) -> set[str]:
+    return {
+        f"T{match.group(1)}" + (f".{match.group(2)}" if match.group(2) else "")
+        for match in _TECHNIQUE_ID_PATTERN.finditer(title)
+    }
 
 
 def matches(result: Mapping[str, Any], judgment: Mapping[str, Any]) -> bool:
@@ -15,6 +31,11 @@ def matches(result: Mapping[str, Any], judgment: Mapping[str, Any]) -> bool:
         return False
     if "text_contains" in judgment and (
         judgment["text_contains"].casefold() not in str(result.get("text", "")).casefold()
+    ):
+        return False
+    if "technique_id" in judgment and (
+        _canonical_technique_id(judgment["technique_id"])
+        not in _title_technique_ids(str(result.get("title", "")))
     ):
         return False
     return True

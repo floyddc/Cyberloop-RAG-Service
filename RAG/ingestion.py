@@ -1,3 +1,4 @@
+import json
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List
@@ -14,9 +15,48 @@ class SourceDocument:
     metadata: Dict[str, Any]
 
 
+def _action_content(action: Dict[str, Any]) -> str:
+    name = str(action["action"])
+    lines = [f"# Action {name}", f"action: {name}"]
+    if action.get("description"):
+        lines.append(f"description: {action['description']}")
+    required = action.get("required_fields")
+    if required:
+        lines.append(f"required_fields: {', '.join(str(field) for field in required)}")
+    if action.get("max_auto_severity"):
+        lines.append(f"max_auto_severity: {action['max_auto_severity']}")
+    return "\n".join(lines)
+
+
+def _split_actions_catalog(row: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return one row per catalog action so each action gets its own retrievable chunk."""
+    try:
+        actions = json.loads(row["content"]).get("actions")
+    except (ValueError, AttributeError):
+        return [row]
+    if not isinstance(actions, list) or not all(
+        isinstance(action, dict) and action.get("action") for action in actions
+    ):
+        return [row]
+    return [
+        {
+            **row,
+            "source_path": f"{row['source_path']}#{action['action']}",
+            "title": f"Action {action['action']}",
+            "content": _action_content(action),
+        }
+        for action in actions
+    ]
+
+
 def _knowledge_documents(rows: List[Dict[str, Any]]) -> List[SourceDocument]:
     documents = []
-    for row in rows:
+    expanded_rows = [
+        part
+        for row in rows
+        for part in (_split_actions_catalog(row) if row.get("category") == "actions_catalog" else [row])
+    ]
+    for row in expanded_rows:
         metadata = row.get("metadata") or {}
         if not isinstance(metadata, dict):
             raise ValueError(f"Knowledge document {row['source_path']} has invalid metadata")

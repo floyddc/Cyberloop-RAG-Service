@@ -1,0 +1,268 @@
+{
+  "description": "Retrieval quality dataset. Judgments locate results by title/text because KB ids are DB serials. Grades: 2 = primary answer, 1 = useful supporting context. MITRE technique titles look like 'T1110 - Brute Force', so the trailing ' - ' keeps a technique from matching its sub-techniques.",
+  "fixture_cases": [
+    {
+      "customer": 900001,
+      "title": "Ransomware encrypted departmental file shares after RDP compromise",
+      "text": "A domain admin account reused across systems was used to log in over RDP from an external address. The attacker deleted volume shadow copies with vssadmin, then a payload renamed more than 4,000 files on two file servers to a .locked extension and dropped a ransom note. Both servers were isolated, the account was disabled and passwords were reset, and data was restored from offline backups. Lesson learned: enforce MFA on remote access and restrict RDP exposure."
+    },
+    {
+      "customer": 900001,
+      "title": "Phishing invoice with macro-enabled document launching a PowerShell downloader",
+      "text": "An accounting user opened an emailed invoice in .docm format and enabled macros. The macro started powershell.exe with an encoded command that downloaded a loader from a compromised WordPress site. The sender domain was blocked, the attachment quarantined and the host reimaged. Lesson learned: block macros from the internet by policy and add the sender infrastructure to the mail filter."
+    },
+    {
+      "customer": 900001,
+      "title": "Credential dumping against LSASS on a domain controller",
+      "text": "EDR reported a process opening a handle to lsass.exe with read access on a domain controller. Investigation found rundll32 invoking comsvcs.dll MiniDump to write a memory dump to the temp folder. The dump was collected, affected privileged accounts were reset and the krbtgt password was rotated twice. Lesson learned: enable credential guard and alert on LSASS access by non-system processes."
+    },
+    {
+      "customer": 900001,
+      "title": "VPN gateway password guessing from rotating IP addresses",
+      "text": "The VPN concentrator logged thousands of failed authentications for several accounts from many source addresses within one hour, followed by a successful login for one user from the same ASN. The source ranges were blocked, the affected user's sessions were revoked and the password reset. Lesson learned: require MFA on the VPN and rate limit failed logons per account."
+    },
+    {
+      "customer": 900001,
+      "title": "HTTPS beaconing to a newly registered domain from a workstation",
+      "text": "Network telemetry showed a workstation connecting every 60 seconds with small random jitter to a domain registered three days earlier over TLS. The process was a signed binary loaded with an unsigned DLL. The domain was blocked at DNS, a memory image was captured and an EDR scan removed the implant. Lesson learned: monitor newly registered domains and inspect outbound TLS from servers and workstations."
+    },
+    {
+      "customer": 900001,
+      "title": "Large upload of company documents to a personal cloud storage account",
+      "text": "A user account transferred 40 GB to an external cloud storage service using the rclone utility outside working hours. Proxy logs showed sustained uploads to the provider's API endpoint. The account was disabled, the tool removed and the data owner informed. Lesson learned: restrict file synchronisation tools and alert on abnormal outbound volume."
+    },
+    {
+      "customer": 900001,
+      "title": "Persistence through a scheduled task created by a trojanized installer",
+      "text": "After a user ran a software installer downloaded from a file sharing site, a scheduled task named after a system component was created with schtasks to run a script stored under AppData at every logon. The task and script were removed and the installer hash was blocked. Lesson learned: audit new scheduled tasks and restrict script execution from user profile folders."
+    },
+    {
+      "customer": 900001,
+      "title": "Internal vulnerability scanner flagged as network port scan",
+      "text": "The IDS raised a high severity port scan alert from an internal address. The source was the approved vulnerability scanner running its weekly authenticated scan window. No malicious activity was found and the alert was closed as a false positive. Lesson learned: tag the scanner address and scheduled windows so scan activity is suppressed or downgraded."
+    }
+  ],
+  "queries": [
+    {
+      "id": "ransomware-alert",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Mass file rename with ransom note and shadow copy deletion",
+        "alert_description": "Over 3,000 files were renamed with a new extension on a file server and vssadmin delete shadows was executed.",
+        "alert_customer_id": 900001,
+        "alert_iocs": [
+          {
+            "ioc_value": "vssadmin.exe delete shadows /all /quiet",
+            "ioc_type": "command",
+            "ioc_description": "Shadow copy deletion"
+          }
+        ]
+      },
+      "relevant": [
+        {"type": "case", "title_contains": "Ransomware encrypted departmental file shares", "grade": 2},
+        {"type": "kb", "title_contains": "T1486 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1490 - ", "grade": 1}
+      ]
+    },
+    {
+      "id": "macro-invoice-query",
+      "customer": 900001,
+      "query": "user enabled macros in an emailed invoice document and powershell downloaded a payload",
+      "relevant": [
+        {"type": "case", "title_contains": "Phishing invoice with macro-enabled document", "grade": 2},
+        {"type": "kb", "title_contains": "T1566.001 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1059.001 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1204.002 - ", "grade": 1}
+      ]
+    },
+    {
+      "id": "lsass-dump-alert",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Suspicious access to LSASS process memory",
+        "alert_description": "rundll32.exe loaded comsvcs.dll and wrote a minidump of lsass.exe on a domain controller.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "case", "title_contains": "Credential dumping against LSASS", "grade": 2},
+        {"type": "kb", "title_contains": "T1003.001 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1218.011 - ", "grade": 1}
+      ]
+    },
+    {
+      "id": "vpn-bruteforce-query",
+      "customer": 900001,
+      "query": "many failed vpn logins from different ip addresses then one successful login",
+      "relevant": [
+        {"type": "case", "title_contains": "VPN gateway password guessing", "grade": 2},
+        {"type": "kb", "title_contains": "T1110 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1110.003 - ", "grade": 1}
+      ]
+    },
+    {
+      "id": "tls-beacon-alert",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Periodic outbound TLS connections to newly registered domain",
+        "alert_description": "Workstation connects every 60 seconds with jitter to a domain registered three days ago.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "case", "title_contains": "HTTPS beaconing to a newly registered domain", "grade": 2},
+        {"type": "kb", "title_contains": "T1071.001 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1573 - ", "grade": 1}
+      ]
+    },
+    {
+      "id": "cloud-exfiltration-query",
+      "customer": 900001,
+      "query": "gigabytes of internal documents uploaded to personal cloud storage with rclone",
+      "relevant": [
+        {"type": "case", "title_contains": "Large upload of company documents", "grade": 2},
+        {"type": "kb", "title_contains": "T1567.002 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1048 - ", "grade": 1}
+      ]
+    },
+    {
+      "id": "scheduled-task-query",
+      "customer": 900001,
+      "query": "new scheduled task launching a script from appdata at logon after installer execution",
+      "relevant": [
+        {"type": "case", "title_contains": "Persistence through a scheduled task", "grade": 2},
+        {"type": "kb", "title_contains": "T1053.005 - ", "grade": 2},
+        {"type": "kb", "text_contains": "disable_persistence", "grade": 1}
+      ]
+    },
+    {
+      "id": "port-scan-alert",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Port scan detected from internal host",
+        "alert_description": "Internal address generated connections to many ports across the server subnet during a scheduled window.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "case", "title_contains": "Internal vulnerability scanner flagged", "grade": 2},
+        {"type": "kb", "title_contains": "T1046 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "encoded-powershell-alert",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Encoded PowerShell command executed by Office process",
+        "alert_description": "winword.exe spawned powershell.exe with -EncodedCommand and a long base64 string.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "title_contains": "T1059.001 - ", "grade": 2},
+        {"type": "kb", "title_contains": "T1027 - ", "grade": 1},
+        {"type": "kb", "text_contains": "audit_power_shell_executions", "grade": 1}
+      ]
+    },
+    {
+      "id": "run-key-persistence-query",
+      "customer": 900001,
+      "query": "registry run key modified to launch an executable at user logon",
+      "relevant": [
+        {"type": "kb", "title_contains": "T1547.001 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "external-rdp-query",
+      "customer": 900001,
+      "query": "remote desktop session opened from an external ip address to a server",
+      "relevant": [
+        {"type": "kb", "title_contains": "T1021.001 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "dll-sideloading-query",
+      "customer": 900001,
+      "query": "legitimate signed binary loading a malicious dll from its own folder",
+      "relevant": [
+        {"type": "kb", "title_contains": "T1574.002 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "pass-the-hash-query",
+      "customer": 900001,
+      "query": "ntlm hash reused to authenticate to another host without knowing the password",
+      "relevant": [
+        {"type": "kb", "title_contains": "T1550.002 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "kerberoasting-query",
+      "customer": 900001,
+      "query": "service ticket requests for many service principal names using rc4 encryption",
+      "relevant": [
+        {"type": "kb", "title_contains": "T1558.003 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "process-injection-query",
+      "customer": 900001,
+      "query": "process wrote code into the memory of another running process and created a remote thread",
+      "relevant": [
+        {"type": "kb", "title_contains": "T1055 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "clear-event-logs-query",
+      "customer": 900001,
+      "query": "windows security event log cleared unexpectedly by an administrator account",
+      "relevant": [
+        {"type": "kb", "title_contains": "T1070.001 - ", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-isolate-host",
+      "customer": 900001,
+      "query": "isolate an endpoint from the network to stop lateral movement",
+      "relevant": [
+        {"type": "kb", "text_contains": "isolate_host", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-block-domain",
+      "customer": 900001,
+      "query": "block access to a malicious domain through dns controls",
+      "relevant": [
+        {"type": "kb", "text_contains": "block_domain", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-capture-memory",
+      "customer": 900001,
+      "query": "capture a memory image of the host for forensic analysis",
+      "relevant": [
+        {"type": "kb", "text_contains": "capture_memory", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-disable-account",
+      "customer": 900001,
+      "query": "disable a compromised user account in the identity provider",
+      "relevant": [
+        {"type": "kb", "text_contains": "disable_account", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-kill-process",
+      "customer": 900001,
+      "query": "terminate a malicious running process on the affected host",
+      "relevant": [
+        {"type": "kb", "text_contains": "kill_process", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-block-hash",
+      "customer": 900001,
+      "query": "block execution of a known malicious file hash through edr",
+      "relevant": [
+        {"type": "kb", "text_contains": "block_hash", "grade": 2}
+      ]
+    }
+  ]
+}

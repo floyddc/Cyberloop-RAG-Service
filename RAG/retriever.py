@@ -18,7 +18,7 @@ def _diversity_key(hit: dict) -> str:
     source = str(metadata.get("source") or "")
     match = config._TECHNIQUE_ID.search(source) or config._TECHNIQUE_ID.search(hit["text"][:300])
     if not match:
-        return source
+        return _hit_key(hit)
     return f"T{match.group(1)}" + (f".{match.group(2)}" if match.group(2) else "")
 
 

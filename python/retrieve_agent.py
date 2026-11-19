@@ -38,6 +38,13 @@ class RetrieveAgent:
             k_kb=k_kb,
         )
 
+    @staticmethod
+    def _abstract_file_name(match: re.Match) -> str:
+        name = match.group(0)
+        if name.rsplit(".", 1)[0].casefold() in config._KNOWN_BINARIES:
+            return name
+        return config._FILE_TYPES[match.group("ext").lower()]
+
     def _incident_to_query(self, incident: Any, semantic: bool = False) -> str:
 
         if isinstance(incident, str): return incident
@@ -106,9 +113,6 @@ class RetrieveAgent:
         if semantic:
             if config._DOWNLOADS_PATH_PATTERN.search(json.dumps(incident, ensure_ascii=False, default=str)):
                 add("origin", "downloaded by the user")
-            parts = [
-                config._FILE_NAME_PATTERN.sub(lambda m: config._FILE_TYPES[m.group("ext").lower()], part)
-                for part in parts
-            ]
+            parts = [config._FILE_NAME_PATTERN.sub(self._abstract_file_name, part) for part in parts]
         query = "\n".join(parts)
         return query[:1600] if query else json.dumps(incident, ensure_ascii=False, default=str)

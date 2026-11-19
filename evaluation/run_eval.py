@@ -327,6 +327,7 @@ def _format_query_diagnostic(
     return {
         "query_id": query["id"],
         "candidate_count": kb_trace.get("candidate_count", len(candidates)),
+        "category_added": kb_trace.get("category_added", 0),
         "lexical_added": kb_trace.get("lexical_added", 0),
         "candidates": candidate_summaries,
         "judgments": judgment_diagnostics,

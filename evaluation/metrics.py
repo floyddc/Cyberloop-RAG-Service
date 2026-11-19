@@ -49,11 +49,6 @@ def rank_results(
     results: Sequence[Mapping[str, Any]],
     judgments: Sequence[Mapping[str, Any]],
 ) -> Tuple[List[int], List[Mapping[str, Any]]]:
-    """Return the gain of every ranked result and the judgments no result satisfied.
-
-    A judgment can be satisfied only once, so several chunks of the same document
-    cannot inflate recall or nDCG; the result takes the highest-grade judgment it matches.
-    """
     pending = list(judgments)
     gains: List[int] = []
     for result in results:

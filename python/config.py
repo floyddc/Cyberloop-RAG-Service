@@ -15,14 +15,17 @@ RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")    
 CHUNK_SIZE = 300
 CHUNK_OVERLAP = 50
 TOP_K = 5
-RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "10"))
+RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "30"))
 RETRIEVAL_DIAGNOSTICS_ENABLED = os.environ.get(
     "RETRIEVAL_DIAGNOSTICS_ENABLED", ""
 ).strip().lower() in {"1", "true", "yes"}
 RERANK_MIN_SCORE = None         
 RERANK_SCORE_MARGIN = None      
-RERANK_FUSION_WEIGHT = 1.0      
-LEXICAL_FUSION_WEIGHT = 1.5     
+VECTOR_FUSION_WEIGHT = float(os.environ.get("VECTOR_FUSION_WEIGHT", "0"))      # the cross-encoder already reads every vector candidate: its rank is kept only as an optional tie-breaker
+RERANK_FUSION_WEIGHT = float(os.environ.get("RERANK_FUSION_WEIGHT", "1.0"))
+LEXICAL_FUSION_WEIGHT = float(os.environ.get("LEXICAL_FUSION_WEIGHT", "0.5"))
+ACTION_CANDIDATES = int(os.environ.get("ACTION_CANDIDATES", "8"))     # catalog actions always added to the rerank pool, so they do not compete with thousands of MITRE chunks for a vector slot (0 disables it)
+ACTION_CATEGORY = "actions_catalog"
 LEXICAL_CANDIDATES = int(os.environ.get("LEXICAL_CANDIDATES", "20"))   # chunks added to the rerank pool by the full-corpus BM25 search (0 disables it)
 LEXICAL_INDEX_TTL_SECONDS = int(os.environ.get("LEXICAL_INDEX_TTL_SECONDS", "300"))
 CONTEXT_EXPAND_TOP = 1  
@@ -102,6 +105,22 @@ _FILE_TYPES = {
     "xlsx": "Office spreadsheet", "pdf": "PDF document", "zip": "archive", "rar": "archive", "7z": "archive",
 }
 _FILE_NAME_PATTERN = re.compile(r"(?<![\w.\-])[\w][\w.\-]*\.(?P<ext>" + "|".join(_FILE_TYPES) + r")\b", re.IGNORECASE)
+# well-known system binaries and tools: their name is the strongest signal of an alert, so it is kept instead of being reduced to a file type
+_KNOWN_BINARIES = {
+    "powershell", "powershell_ise", "pwsh", "cmd", "wscript", "cscript", "mshta", "rundll32", "regsvr32",
+    "regsvcs", "regasm", "msbuild", "installutil", "msiexec", "certutil", "certreq", "bitsadmin", "wmic",
+    "wmiprvse", "schtasks", "at", "sc", "reg", "regedit", "regini", "net", "net1", "netsh", "nltest",
+    "whoami", "ipconfig", "systeminfo", "tasklist", "taskkill", "nslookup", "ping", "arp", "route",
+    "netstat", "vssadmin", "wbadmin", "bcdedit", "wevtutil", "fsutil", "cipher", "forfiles", "cmstp",
+    "control", "odbcconf", "mavinject", "msdt", "msxsl", "pcalua", "esentutl", "expand", "extrac32",
+    "findstr", "ftp", "hh", "makecab", "mmc", "verclsid", "xwizard", "wuauclt", "ntdsutil", "dsquery",
+    "dllhost", "svchost", "lsass", "services", "smss", "csrss", "wininit", "winlogon", "explorer",
+    "conhost", "spoolsv", "taskhost", "taskhostw", "curl", "tar", "ssh", "scp", "comsvcs", "dbghelp",
+    "ntdll", "kernel32", "advapi32", "syncappvpublishingserver", "winword", "excel", "powerpnt",
+    "outlook", "onenote", "msaccess", "mspub", "acrord32", "chrome", "msedge", "firefox", "iexplore",
+    "psexec", "psexesvc", "procdump", "mimikatz", "rclone", "anydesk", "teamviewer", "screenconnect",
+    "plink", "putty", "nmap", "masscan", "winscp", "winrar", "sdelete",
+}
 _DOWNLOADS_PATH_PATTERN = re.compile(r"[\\/]downloads[\\/]", re.IGNORECASE)
 _LOG_LABEL_PATTERN = re.compile(r"\b(?:file|path|process|image|sha1|sha256|sha512|ip|storyline|site)\s*:", re.IGNORECASE)
 _LOG_FIELDS = {"generic_full_log", "windows_full_log", "full_log", "raw_log"}
@@ -125,3 +144,6 @@ _LEXICAL_STOP_WORDS = {
     "source", "description", "title", "file", "origin", "log", "message",
     "security", "event", "user",
 }
+_K1 = 1.2
+_B = 0.75
+_VOWELS = "aeiou"

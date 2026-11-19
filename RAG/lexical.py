@@ -6,10 +6,6 @@ from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 import config
 
-_K1 = 1.2
-_B = 0.75
-_VOWELS = "aeiou"
-
 
 @lru_cache(maxsize=65536)
 def _stem(token: str) -> str:
@@ -22,7 +18,7 @@ def _stem(token: str) -> str:
         token, stripped = token[:-3], True
     elif token.endswith("ed") and len(token) >= 5:
         token, stripped = token[:-2], True
-    if stripped and len(token) >= 4 and token[-1] == token[-2] and token[-1] not in _VOWELS:
+    if stripped and len(token) >= 4 and token[-1] == token[-2] and token[-1] not in config._VOWELS:
         token = token[:-1]
     if token.endswith("e") and len(token) >= 4:
         token = token[:-1]
@@ -73,7 +69,6 @@ class LexicalIndex:
         return self._position_by_key.get(key)
 
     def search(self, query: str, limit: Optional[int] = None) -> List[Tuple[int, float]]:
-        """Return (position, BM25 score) pairs, best first; chunks sharing no term are omitted."""
         total = len(self.keys)
         scores: Dict[int, float] = defaultdict(float)
         for term in set(tokenize(query)):
@@ -83,12 +78,12 @@ class LexicalIndex:
             document_frequency = len(postings)
             inverse_frequency = math.log(1 + (total - document_frequency + 0.5) / (document_frequency + 0.5))
             for position, frequency in postings:
-                length_norm = 1 - _B + _B * self._lengths[position] / self._average_length
+                length_norm = 1 - config._B + config._B * self._lengths[position] / self._average_length
                 scores[position] += (
-                    inverse_frequency * frequency * (_K1 + 1) / (frequency + _K1 * length_norm)
+                    inverse_frequency * frequency * (config._K1 + 1) / (frequency + config._K1 * length_norm)
                 )
         ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
-        return ranked[:limit] if limit else ranked
+        return ranked[:limit] if limit else ranked  # position, BM25 score pairs
 
 
 class LexicalIndexCache:

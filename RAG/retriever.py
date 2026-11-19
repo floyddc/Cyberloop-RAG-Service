@@ -17,7 +17,6 @@ _lexical_cache = LexicalIndexCache()
 
 
 def _diversity_key(hit: dict) -> str:
-    # the same MITRE technique can come from several sources/chunks: treat it as one result
     metadata = hit["metadata"]
     source = str(metadata.get("source") or "")
     match = config._TECHNIQUE_ID.search(source) or config._TECHNIQUE_ID.search(hit["text"][:300])
@@ -88,7 +87,6 @@ def _load_lexical_index(collection, where: dict) -> LexicalIndex:
 
 
 def _get_lexical_index(collection, where: dict) -> Optional[LexicalIndex]:
-    # the lexical search only adds candidates: if it cannot run, vector retrieval still works
     if config.LEXICAL_CANDIDATES <= 0:
         return None
     try:
@@ -109,7 +107,6 @@ def lexical_candidates(
     known_keys: set,
     limit: int,
 ) -> Tuple[List[dict], List[Tuple[int, float]]]:
-    """Top BM25 chunks of the whole collection that the vector search did not return."""
     ranking = index.search(query)
     added: List[dict] = []
     for position, score in ranking:
@@ -124,6 +121,34 @@ def lexical_candidates(
         known_keys.add(key)
         added.append({"text": text, "metadata": index.metadatas[position], "distance": None})
     return added, ranking
+
+
+def category_candidates(
+    collection,
+    query_embedding: List[float],
+    known_keys: set,
+    category: str,
+    limit: int,
+) -> List[dict]:
+    if limit <= 0:
+        return []
+    try:
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=limit,
+            where={"$and": [{"scope": "global"}, {"category": category}]},
+        )
+    except Exception:
+        logger.warning("Could not retrieve %s candidates", category, exc_info=True)
+        return []
+    added: List[dict] = []
+    for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], results["distances"][0]):
+        text = clean_retrieval_text(doc)
+        hit = {"text": text, "metadata": meta, "distance": dist}
+        if text and _hit_key(hit) not in known_keys:
+            known_keys.add(_hit_key(hit))
+            added.append(hit)
+    return added
 
 
 def order_by_lexical_score(pool: List[dict], index: LexicalIndex, ranking: List[Tuple[int, float]]) -> List[dict]:
@@ -173,10 +198,12 @@ def fuse_rankings(
     lexical_hits: Optional[List[dict]] = None,
     rerank_weight: Optional[float] = None,
     lexical_weight: Optional[float] = None,
+    vector_weight: Optional[float] = None,
 ) -> List[dict]:
 
     rerank_weight = config.RERANK_FUSION_WEIGHT if rerank_weight is None else rerank_weight
     lexical_weight = config.LEXICAL_FUSION_WEIGHT if lexical_weight is None else lexical_weight
+    vector_weight = config.VECTOR_FUSION_WEIGHT if vector_weight is None else vector_weight
     vector_rank = {_hit_key(hit): rank for rank, hit in enumerate(vector_hits, start=1)}
     lexical_rank_by_hit = {
         _hit_key(hit): rank for rank, hit in enumerate(lexical_hits or [], start=1)
@@ -188,7 +215,7 @@ def fuse_rankings(
         hit["vector_rank"] = position
         hit["lexical_rank"] = lexical_position
         hit["fused_score"] = (
-            1 / (config._RRF_K + position)
+            vector_weight / (config._RRF_K + position)
             + rerank_weight / (config._RRF_K + rank)
             + lexical_weight / (config._RRF_K + lexical_position)
         )
@@ -256,7 +283,7 @@ def _retrieve(
     if isinstance(customer_id, bool) or not isinstance(customer_id, int) or customer_id <= 0:
         raise ValueError("customer_id must be a positive integer for tenant-scoped retrieval")
 
-    # get ChromaDB collection
+    # 1. get ChromaDB collection
     collection = get_collection()
 
     if collection.count() == 0:
@@ -264,12 +291,13 @@ def _retrieve(
             diagnostics.update({"candidate_count": 0, "candidates": []})
         return []
 
+    # 2. determine candidate count
     candidate_k = min(max(top_k, config.RERANK_CANDIDATES), collection.count())
 
-    # generate query embedding
+    # 3. generate query embedding
     query_embedding = embed_query(query)
 
-    # ChromaDB vector search
+    # 4. ChromaDB vector search
     if result_kind == "case":
         where = {
             "$and": [
@@ -300,16 +328,23 @@ def _retrieve(
         if cleaned_doc:
             hits.append({"text": cleaned_doc, "metadata": meta, "distance": dist})
 
-    # reranking: vector candidates plus the best chunks of a BM25 search over the whole collection
+    # 5. reranking: vector candidates, the nearest catalog actions and the best chunks of a BM25 search over the whole collection
     vector_keys = {_hit_key(hit) for hit in hits}
+    known_keys = set(vector_keys)
+    action_only: List[dict] = []
+    if result_kind != "case":
+        action_only = category_candidates(
+            collection, query_embedding, known_keys, config.ACTION_CATEGORY, config.ACTION_CANDIDATES
+        )
+    action_keys = {_hit_key(hit) for hit in action_only}
     lexical_index = _get_lexical_index(collection, where)
     lexical_only: List[dict] = []
     lexical_ranking: List[Tuple[int, float]] = []
     if lexical_index is not None:
         lexical_only, lexical_ranking = lexical_candidates(
-            lexical_index, query, set(vector_keys), config.LEXICAL_CANDIDATES
+            lexical_index, query, known_keys, config.LEXICAL_CANDIDATES
         )
-    pool = hits + lexical_only
+    pool = hits + action_only + lexical_only
     reranked_hits = rerank(query, pool, top_k=len(pool))
     if lexical_index is not None:
         lexical_hits = order_by_lexical_score(pool, lexical_index, lexical_ranking)
@@ -347,7 +382,7 @@ def _retrieve(
                 "id": key,
                 "source": metadata.get("source", ""),
                 "title": metadata.get("title") or metadata.get("source", ""),
-                "origin": "vector" if key in vector_ranks else "lexical",
+                "origin": "vector" if key in vector_ranks else "category" if key in action_keys else "lexical",
                 "distance": None if hit["distance"] is None else float(hit["distance"]),
                 "rerank_score": hit.get("rerank_score"),
                 "fused_score": hit.get("fused_score"),
@@ -364,6 +399,7 @@ def _retrieve(
         diagnostics.update(
             {
                 "candidate_count": len(candidates),
+                "category_added": len(action_only),
                 "lexical_added": len(lexical_only),
                 "candidates": candidates,
             }

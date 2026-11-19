@@ -7,6 +7,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 import config
 from .embeddings import embed_query
 from .lexical import LexicalIndex, LexicalIndexCache
+from .query_expansion import attack_query_expansions
 from .reranker import rerank
 from .text_cleaner import clean_retrieval_text, split_sentences
 from .vector_store import get_collection, index_generation
@@ -87,8 +88,6 @@ def _load_lexical_index(collection, where: dict) -> LexicalIndex:
 
 
 def _get_lexical_index(collection, where: dict) -> Optional[LexicalIndex]:
-    if config.LEXICAL_CANDIDATES <= 0:
-        return None
     try:
         return _lexical_cache.get(
             json.dumps(where, sort_keys=True),
@@ -121,6 +120,40 @@ def lexical_candidates(
         known_keys.add(key)
         added.append({"text": text, "metadata": index.metadatas[position], "distance": None})
     return added, ranking
+
+
+def attack_expansion_candidates(
+    index: LexicalIndex,
+    expansions: List[str],
+    known_keys: set,
+    limit_per_expansion: int,
+) -> List[dict]:
+    added: List[dict] = []
+    if limit_per_expansion <= 0:
+        return added
+
+    for expansion in expansions:
+        added_for_expansion = 0
+        for position, _ in index.search(expansion):
+            if added_for_expansion >= limit_per_expansion:
+                break
+            key = index.keys[position]
+            if key in known_keys:
+                continue
+            text = clean_retrieval_text(index.texts[position])
+            if not text:
+                continue
+            known_keys.add(key)
+            added.append(
+                {
+                    "text": text,
+                    "metadata": index.metadatas[position],
+                    "distance": None,
+                    "matched_expansion": expansion,
+                }
+            )
+            added_for_expansion += 1
+    return added
 
 
 def category_candidates(
@@ -328,23 +361,55 @@ def _retrieve(
         if cleaned_doc:
             hits.append({"text": cleaned_doc, "metadata": meta, "distance": dist})
 
-    # 5. reranking: vector candidates, the nearest catalog actions and the best chunks of a BM25 search over the whole collection
+    # 5. reranking: vector candidates, targeted action and ATT&CK lexical candidates, then full-corpus BM25 candidates
     vector_keys = {_hit_key(hit) for hit in hits}
     known_keys = set(vector_keys)
     action_only: List[dict] = []
+    action_lexical_only: List[dict] = []
     if result_kind != "case":
         action_only = category_candidates(
             collection, query_embedding, known_keys, config.ACTION_CATEGORY, config.ACTION_CANDIDATES
         )
+        if config.ACTION_LEXICAL_CANDIDATES > 0:
+            action_where = {
+                "$and": [
+                    {"scope": "global"},
+                    {"category": config.ACTION_CATEGORY},
+                ]
+            }
+            action_index = _get_lexical_index(collection, action_where)
+            if action_index is not None:
+                action_lexical_only, _ = lexical_candidates(
+                    action_index, query, known_keys, config.ACTION_LEXICAL_CANDIDATES
+                )
+    attack_expansions = attack_query_expansions(query) if result_kind != "case" else []
+    expansion_only: List[dict] = []
+    if attack_expansions and config.ATTACK_EXPANSION_CANDIDATES > 0:
+        expansion_index = _get_lexical_index(collection, where)
+        if expansion_index is not None:
+            expansion_only = attack_expansion_candidates(
+                expansion_index,
+                attack_expansions,
+                known_keys,
+                config.ATTACK_EXPANSION_CANDIDATES,
+            )
     action_keys = {_hit_key(hit) for hit in action_only}
-    lexical_index = _get_lexical_index(collection, where)
+    action_lexical_keys = {_hit_key(hit) for hit in action_lexical_only}
+    expansion_keys = {_hit_key(hit) for hit in expansion_only}
+    lexical_index = (
+        _get_lexical_index(collection, where)
+        if config.LEXICAL_CANDIDATES > 0 or (attack_expansions and config.ATTACK_EXPANSION_CANDIDATES > 0)
+        else None
+    )
     lexical_only: List[dict] = []
     lexical_ranking: List[Tuple[int, float]] = []
-    if lexical_index is not None:
+    if lexical_index is not None and config.LEXICAL_CANDIDATES > 0:
         lexical_only, lexical_ranking = lexical_candidates(
             lexical_index, query, known_keys, config.LEXICAL_CANDIDATES
         )
-    pool = hits + action_only + lexical_only
+    if lexical_index is not None and not lexical_ranking:
+        lexical_ranking = lexical_index.search(query)
+    pool = hits + action_only + action_lexical_only + expansion_only + lexical_only
     reranked_hits = rerank(query, pool, top_k=len(pool))
     if lexical_index is not None:
         lexical_hits = order_by_lexical_score(pool, lexical_index, lexical_ranking)
@@ -382,7 +447,13 @@ def _retrieve(
                 "id": key,
                 "source": metadata.get("source", ""),
                 "title": metadata.get("title") or metadata.get("source", ""),
-                "origin": "vector" if key in vector_ranks else "category" if key in action_keys else "lexical",
+                "origin": (
+                    "vector" if key in vector_ranks
+                    else "category" if key in action_keys
+                    else "category_lexical" if key in action_lexical_keys
+                    else "attack_expansion" if key in expansion_keys
+                    else "lexical"
+                ),
                 "distance": None if hit["distance"] is None else float(hit["distance"]),
                 "rerank_score": hit.get("rerank_score"),
                 "fused_score": hit.get("fused_score"),
@@ -393,6 +464,8 @@ def _retrieve(
                 "fused_rank": fused_ranks.get(key),
                 "returned_rank": returned_ranks.get(key),
             }
+            if hit.get("matched_expansion"):
+                candidate["matched_expansion"] = hit["matched_expansion"]
             if result_kind == "kb":
                 candidate["text"] = hit["text"]
             candidates.append(candidate)
@@ -400,6 +473,9 @@ def _retrieve(
             {
                 "candidate_count": len(candidates),
                 "category_added": len(action_only),
+                "category_lexical_added": len(action_lexical_only),
+                "attack_expansion_added": len(expansion_only),
+                "attack_expansions": attack_expansions,
                 "lexical_added": len(lexical_only),
                 "candidates": candidates,
             }

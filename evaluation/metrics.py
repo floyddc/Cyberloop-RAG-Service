@@ -2,7 +2,7 @@ import re
 from math import log2
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
-MATCH_FIELDS = ("id", "title_contains", "text_contains", "technique_id")
+MATCH_FIELDS = ("id", "title_contains", "text_contains", "technique_id", "technique_family")
 _TECHNIQUE_ID_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])T(\d{4})(?:[._](\d{3}))?(?![A-Za-z0-9._])",
     re.IGNORECASE,
@@ -18,6 +18,11 @@ def _title_technique_ids(title: str) -> set[str]:
         f"T{match.group(1)}" + (f".{match.group(2)}" if match.group(2) else "")
         for match in _TECHNIQUE_ID_PATTERN.finditer(title)
     }
+
+
+def _same_family(wanted: str, found: set[str]) -> bool:
+    base = _canonical_technique_id(wanted).split(".")[0]
+    return any(technique.split(".")[0] == base for technique in found)
 
 
 def matches(result: Mapping[str, Any], judgment: Mapping[str, Any]) -> bool:
@@ -36,6 +41,11 @@ def matches(result: Mapping[str, Any], judgment: Mapping[str, Any]) -> bool:
     if "technique_id" in judgment and (
         _canonical_technique_id(judgment["technique_id"])
         not in _title_technique_ids(str(result.get("title", "")))
+    ):
+        return False
+    if "technique_family" in judgment and not _same_family(
+        judgment["technique_family"],
+        _title_technique_ids(str(result.get("title", ""))),
     ):
         return False
     return True

@@ -23,12 +23,12 @@ RERANK_MIN_SCORE = None
 RERANK_SCORE_MARGIN = None      
 VECTOR_FUSION_WEIGHT = float(os.environ.get("VECTOR_FUSION_WEIGHT", "0"))      # the cross-encoder already reads every vector candidate: its rank is kept only as an optional tie-breaker
 RERANK_FUSION_WEIGHT = float(os.environ.get("RERANK_FUSION_WEIGHT", "1.0"))
-LEXICAL_FUSION_WEIGHT = float(os.environ.get("LEXICAL_FUSION_WEIGHT", "0.5"))
+LEXICAL_FUSION_WEIGHT = float(os.environ.get("LEXICAL_FUSION_WEIGHT", "0.2"))
 ACTION_CANDIDATES = int(os.environ.get("ACTION_CANDIDATES", "8"))     # catalog actions always added to the rerank pool, so they do not compete with thousands of MITRE chunks for a vector slot (0 disables it)
 ACTION_LEXICAL_CANDIDATES = int(os.environ.get("ACTION_LEXICAL_CANDIDATES", "4"))
 ACTION_CATEGORY = "actions_catalog"
 ATTACK_EXPANSION_CANDIDATES = int(os.environ.get("ATTACK_EXPANSION_CANDIDATES", "3"))
-LEXICAL_CANDIDATES = int(os.environ.get("LEXICAL_CANDIDATES", "20"))   # chunks added to the rerank pool by the full-corpus BM25 search (0 disables it)
+LEXICAL_CANDIDATES = int(os.environ.get("LEXICAL_CANDIDATES", "10"))   # chunks added to the rerank pool by the full-corpus BM25 search (0 disables it)
 LEXICAL_INDEX_TTL_SECONDS = int(os.environ.get("LEXICAL_INDEX_TTL_SECONDS", "300"))
 CONTEXT_EXPAND_TOP = 1  
 _MAX_QUERY_CHARS = 1600
@@ -149,3 +149,11 @@ _LEXICAL_STOP_WORDS = {
 _K1 = 1.2
 _B = 0.75
 _VOWELS = "aeiou"
+RERANK_POOL_SIZE = 36                    # candidati "normali" mandati al cross-encoder
+ACTION_UNGATED_CANDIDATES = 4              # azioni nel pool quando la query non chiede una risposta
+_PROTECTED_ORIGINS = {"category", "category_lexical", "attack_expansion"}
+_ACTION_INTENT = re.compile(
+    r"\b(?:isolat\w*|block\w*|disabl\w*|kill\w*|terminat\w*|quarantin\w*|captur\w*|"
+    r"revok\w*|reset\w*|contain\w*|remediat\w*)\b",
+    re.IGNORECASE,
+)

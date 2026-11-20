@@ -1,6 +1,5 @@
 import json
 import logging
-import math
 import re
 from collections import Counter
 from typing import Dict, List, Literal, Optional, Tuple
@@ -17,14 +16,9 @@ logger = logging.getLogger(__name__)
 _lexical_cache = LexicalIndexCache()
 
 
-def _diversity_key(hit: dict) -> str:
-    metadata = hit["metadata"]
-    source = str(metadata.get("source") or "")
-    match = config._TECHNIQUE_ID.search(source) or config._TECHNIQUE_ID.search(hit["text"][:300])
-    if not match:
-        return _hit_key(hit)
-    return f"T{match.group(1)}" + (f".{match.group(2)}" if match.group(2) else "")
-
+# ============================================================
+# Utilities on candidates
+# ============================================================
 
 def _hit_key(hit: dict) -> str:
     metadata = hit["metadata"]
@@ -35,55 +29,60 @@ def _hit_key(hit: dict) -> str:
     return hit["text"]
 
 
-def lexical_rank(query: str, hits: List[dict]) -> List[dict]:
-    """Rank the vector candidates with BM25 over informative query terms."""
-    query_terms = [
-        token for token in config._TOKEN.findall(query.casefold())
-        if token not in config._LEXICAL_STOP_WORDS and len(token) > 1
-    ]
-    if not query_terms or not hits:
-        return list(hits)
+def _candidate(text: str, metadata: Optional[dict], distance: Optional[float], origin: str,
+               matched_expansion: Optional[str] = None) -> Optional[dict]:
+    text = clean_retrieval_text(text or "")
+    if not text:
+        return None
+    candidate = {
+        "text": text,
+        "metadata": metadata or {},
+        "distance": distance,
+        "origin": origin,
+        "matched_expansion": matched_expansion,
+        "vector_rank": None,
+        "lexical_corpus_rank": None,   # BM25 rank on filtered entire corpus
+        "lexical_rank": None,          # BM25 rank relative to the reranked pool
+        "cheap_score": 0.0,
+        "rerank_score": None,
+        "rerank_rank": None,
+        "fused_score": None,
+        "fused_rank": None,
+    }
+    candidate["key"] = _hit_key(candidate)
+    return candidate
 
-    documents = [
-        [
-            token for token in config._TOKEN.findall(hit["text"].casefold())
-            if token not in config._LEXICAL_STOP_WORDS and len(token) > 1
-        ]
-        for hit in hits
-    ]
-    document_frequency = Counter(
-        token for token in set(term for term in query_terms)
-        for document in documents if token in document
-    )
-    total_documents = len(documents)
-    average_length = sum(map(len, documents)) / max(total_documents, 1)
-    scores = []
-    for original_rank, (hit, terms) in enumerate(zip(hits, documents)):
-        frequencies = Counter(terms)
-        score = 0.0
-        for token in query_terms:
-            frequency = frequencies[token]
-            if not frequency:
-                continue
-            df = document_frequency[token]
-            inverse_frequency = math.log(1 + (total_documents - df + 0.5) / (df + 0.5))
-            denominator = frequency + 1.2 * (
-                1 - 0.75 + 0.75 * len(terms) / max(average_length, 1)
-            )
-            score += inverse_frequency * frequency * 2.2 / denominator
-        scores.append((score, original_rank, hit))
-    scores.sort(key=lambda item: (-item[0], item[1]))
-    for rank, (score, _, hit) in enumerate(scores, start=1):
-        hit["lexical_score"] = score
-        hit["lexical_rank"] = rank
-    return [hit for _, _, hit in scores]
 
+def _diversity_key(hit: dict) -> str:
+    source = str(hit["metadata"].get("source") or "")
+    match = config._TECHNIQUE_ID.search(source) or config._TECHNIQUE_ID.search(hit["text"][:300])
+    if not match:
+        return hit["key"]
+    return f"T{match.group(1)}" + (f".{match.group(2)}" if match.group(2) else "")
+
+
+def _validate_customer(customer_id) -> None:
+    if isinstance(customer_id, bool) or not isinstance(customer_id, int) or customer_id <= 0:
+        raise ValueError("customer_id must be a positive integer for tenant-scoped retrieval")
+
+
+def _where(result_kind: Optional[str], customer_id: int) -> dict:
+    if result_kind == "case":
+        return {"$and": [{"category": "incident_history"}, {"customer": customer_id}]}
+    if result_kind == "kb":
+        return {"$and": [{"scope": "global"}, {"category": {"$ne": "incident_history"}}]}
+    return {"$or": [{"scope": "global"}, {"customer": customer_id}]}
+
+
+# ============================================================
+# Lexical index (BM25)
+# ============================================================
 
 def _load_lexical_index(collection, where: dict) -> LexicalIndex:
     data = collection.get(where=where, include=["documents", "metadatas"])
     texts = [document or "" for document in data["documents"]]
     metadatas = [metadata or {} for metadata in data["metadatas"]]
-    keys = [_hit_key({"text": text, "metadata": metadata}) for text, metadata in zip(texts, metadatas)]
+    keys = [_hit_key({"text": t, "metadata": m}) for t, m in zip(texts, metadatas)]
     return LexicalIndex(keys, texts, metadatas)
 
 
@@ -100,74 +99,31 @@ def _get_lexical_index(collection, where: dict) -> Optional[LexicalIndex]:
         return None
 
 
-def lexical_candidates(
-    index: LexicalIndex,
-    query: str,
-    known_keys: set,
-    limit: int,
-) -> Tuple[List[dict], List[Tuple[int, float]]]:
-    ranking = index.search(query)
+def _from_ranking(index: LexicalIndex, ranking: List[Tuple[int, float]], known: set,
+                  limit: int, origin: str, expansion: Optional[str] = None) -> List[dict]:
     added: List[dict] = []
-    for position, score in ranking:
+    if limit <= 0:
+        return added
+    for position, _ in ranking:
         if len(added) >= limit:
             break
         key = index.keys[position]
-        if key in known_keys:
+        if key in known:
             continue
-        text = clean_retrieval_text(index.texts[position])
-        if not text:
+        candidate = _candidate(index.texts[position], index.metadatas[position], None, origin, expansion)
+        if candidate is None:
             continue
-        known_keys.add(key)
-        added.append({"text": text, "metadata": index.metadatas[position], "distance": None})
-    return added, ranking
-
-
-def attack_expansion_candidates(
-    index: LexicalIndex,
-    expansions: List[str],
-    known_keys: set,
-    limit_per_expansion: int,
-) -> List[dict]:
-    added: List[dict] = []
-    if limit_per_expansion <= 0:
-        return added
-
-    for expansion in expansions:
-        added_for_expansion = 0
-        for position, _ in index.search(expansion):
-            if added_for_expansion >= limit_per_expansion:
-                break
-            key = index.keys[position]
-            if key in known_keys:
-                continue
-            text = clean_retrieval_text(index.texts[position])
-            if not text:
-                continue
-            known_keys.add(key)
-            added.append(
-                {
-                    "text": text,
-                    "metadata": index.metadatas[position],
-                    "distance": None,
-                    "matched_expansion": expansion,
-                }
-            )
-            added_for_expansion += 1
+        known.add(key)
+        added.append(candidate)
     return added
 
 
-def category_candidates(
-    collection,
-    query_embedding: List[float],
-    known_keys: set,
-    category: str,
-    limit: int,
-) -> List[dict]:
+def _category_vector(collection, embedding: List[float], known: set, category: str, limit: int) -> List[dict]:
     if limit <= 0:
         return []
     try:
         results = collection.query(
-            query_embeddings=[query_embedding],
+            query_embeddings=[embedding],
             n_results=limit,
             where={"$and": [{"scope": "global"}, {"category": category}]},
         )
@@ -176,24 +132,42 @@ def category_candidates(
         return []
     added: List[dict] = []
     for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], results["distances"][0]):
-        text = clean_retrieval_text(doc)
-        hit = {"text": text, "metadata": meta, "distance": dist}
-        if text and _hit_key(hit) not in known_keys:
-            known_keys.add(_hit_key(hit))
-            added.append(hit)
+        candidate = _candidate(doc, meta, dist, "category")
+        if candidate is not None and candidate["key"] not in known:
+            known.add(candidate["key"])
+            added.append(candidate)
     return added
 
 
-def order_by_lexical_score(pool: List[dict], index: LexicalIndex, ranking: List[Tuple[int, float]]) -> List[dict]:
-    scores = dict(ranking)
-    scored = []
-    for original_rank, hit in enumerate(pool):
-        position = index.position_of(_hit_key(hit))
-        score = scores.get(position, 0.0) if position is not None else 0.0
-        hit["lexical_score"] = score
-        scored.append((score, original_rank, hit))
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    return [hit for _, _, hit in scored]
+# ============================================================
+# Fusion and selection
+# ============================================================
+
+def _fuse(reranked: List[dict]) -> List[dict]:
+    rerank_w = config.RERANK_FUSION_WEIGHT
+    lexical_w = config.LEXICAL_FUSION_WEIGHT
+    vector_w = config.VECTOR_FUSION_WEIGHT
+    k = config._RRF_K
+
+    with_lexical = sorted(
+        (c for c in reranked if c["lexical_corpus_rank"] is not None),
+        key=lambda c: c["lexical_corpus_rank"],
+    )
+    for rank, candidate in enumerate(with_lexical, start=1):
+        candidate["lexical_rank"] = rank
+
+    for candidate in reranked:
+        score = rerank_w / (k + candidate["rerank_rank"])
+        if candidate["lexical_rank"]:
+            score += lexical_w / (k + candidate["lexical_rank"])
+        if candidate["vector_rank"]:
+            score += vector_w / (k + candidate["vector_rank"])
+        candidate["fused_score"] = score
+
+    fused = sorted(reranked, key=lambda c: (-c["fused_score"], c["rerank_rank"]))
+    for rank, candidate in enumerate(fused, start=1):
+        candidate["fused_rank"] = rank
+    return fused
 
 
 def select_hits(
@@ -201,23 +175,25 @@ def select_hits(
     top_k: int,
     min_score: Optional[float] = None,
     margin: Optional[float] = None,
+    diversify: bool = True,
 ) -> List[dict]:
 
     min_score = config.RERANK_MIN_SCORE if min_score is None else min_score
     margin = config.RERANK_SCORE_MARGIN if margin is None else margin
+    best = max((h["rerank_score"] for h in ranked_hits if h.get("rerank_score") is not None), default=None)
+
     selected: List[dict] = []
     seen = set()
     for hit in ranked_hits:
-        key = _diversity_key(hit)
+        key = _diversity_key(hit) if diversify else hit["key"]
         if key in seen:
             continue
         score = hit.get("rerank_score")
-        if selected and score is not None:
-            best = selected[0].get("rerank_score")
-            if (min_score is not None and score < min_score) or (
-                margin is not None and best is not None and score < best - margin
-            ):
-                break
+        if score is not None and (
+            (min_score is not None and score < min_score)
+            or (margin is not None and best is not None and score < best - margin)
+        ):
+            continue
         seen.add(key)
         selected.append(hit)
         if len(selected) >= top_k:
@@ -225,38 +201,7 @@ def select_hits(
     return selected
 
 
-def fuse_rankings(
-    vector_hits: List[dict],
-    reranked_hits: List[dict],
-    lexical_hits: Optional[List[dict]] = None,
-    rerank_weight: Optional[float] = None,
-    lexical_weight: Optional[float] = None,
-    vector_weight: Optional[float] = None,
-) -> List[dict]:
-
-    rerank_weight = config.RERANK_FUSION_WEIGHT if rerank_weight is None else rerank_weight
-    lexical_weight = config.LEXICAL_FUSION_WEIGHT if lexical_weight is None else lexical_weight
-    vector_weight = config.VECTOR_FUSION_WEIGHT if vector_weight is None else vector_weight
-    vector_rank = {_hit_key(hit): rank for rank, hit in enumerate(vector_hits, start=1)}
-    lexical_rank_by_hit = {
-        _hit_key(hit): rank for rank, hit in enumerate(lexical_hits or [], start=1)
-    }
-    for rank, hit in enumerate(reranked_hits, start=1):
-        key = _hit_key(hit)
-        position = vector_rank.get(key, len(vector_hits) + 1)
-        lexical_position = lexical_rank_by_hit.get(key, len(vector_hits) + 1)
-        hit["vector_rank"] = position
-        hit["lexical_rank"] = lexical_position
-        hit["fused_score"] = (
-            vector_weight / (config._RRF_K + position)
-            + rerank_weight / (config._RRF_K + rank)
-            + lexical_weight / (config._RRF_K + lexical_position)
-        )
-    return sorted(reranked_hits, key=lambda hit: hit["fused_score"], reverse=True)
-
-
 def merge_chunks(current: str, following: str, title: Optional[str] = None) -> str:
-
     if title and following.startswith(f"{title}: "):
         following = following[len(title) + 2:]
     current_sentences = split_sentences(current)
@@ -286,6 +231,159 @@ def expand_hits(collection, hits: List[dict], count: int) -> None:
             hit["text"] = merge_chunks(hit["text"], clean_retrieval_text(documents[0]), metadata.get("title"))
 
 
+# ============================================================
+# Diagnostics
+# ============================================================
+
+def _diagnostics(pool: List[dict], selected: List[dict], expansions: List[str], result_kind: Optional[str]) -> dict:
+    returned = {c["key"]: rank for rank, c in enumerate(selected, start=1)}
+    origins = Counter(c["origin"] for c in pool)
+    candidates = []
+    for c in pool:
+        item = {
+            "id": c["key"],
+            "source": c["metadata"].get("source", ""),
+            "title": c["metadata"].get("title") or c["metadata"].get("source", ""),
+            "origin": c["origin"],
+            "reranked": c["rerank_rank"] is not None,
+            "distance": None if c["distance"] is None else float(c["distance"]),
+            "cheap_score": c["cheap_score"],
+            "rerank_score": c["rerank_score"],
+            "fused_score": c["fused_score"],
+            "vector_rank": c["vector_rank"],
+            "rerank_rank": c["rerank_rank"],
+            "lexical_rank": c["lexical_rank"],
+            "lexical_corpus_rank": c["lexical_corpus_rank"],
+            "fused_rank": c["fused_rank"],
+            "returned_rank": returned.get(c["key"]),
+        }
+        if c["matched_expansion"]:
+            item["matched_expansion"] = c["matched_expansion"]
+        if result_kind == "kb":
+            item["text"] = c["text"]
+        candidates.append(item)
+    return {
+        "candidate_count": len(candidates),
+        "reranked_count": sum(1 for c in pool if c["rerank_rank"] is not None),
+        "category_added": origins["category"],
+        "category_lexical_added": origins["category_lexical"],
+        "attack_expansion_added": origins["attack_expansion"],
+        "attack_expansions": expansions,
+        "lexical_added": origins["lexical"],
+        "candidates": candidates,
+    }
+
+
+# ============================================================
+# Main pipeline
+# ============================================================
+
+def _retrieve(
+    query: str,
+    customer_id: int,
+    top_k: int,
+    result_kind: Optional[Literal["case", "kb"]],
+    diagnostics: Optional[dict] = None,
+    query_embedding: Optional[List[float]] = None,
+) -> List[dict]:
+    _validate_customer(customer_id)
+
+    collection = get_collection()
+    total = collection.count()
+    if total == 0:
+        if diagnostics is not None:
+            diagnostics.update({"candidate_count": 0, "candidates": []})
+        return []
+
+    where = _where(result_kind, customer_id)
+    embedding = query_embedding if query_embedding is not None else embed_query(query)
+    is_kb = result_kind != "case"
+
+    # --- 1. Dense vector search ---
+    results = collection.query(
+        query_embeddings=[embedding],
+        n_results=min(max(top_k, config.RERANK_CANDIDATES), total),
+        where=where,
+    )
+    known: set = set()
+    vector_hits: List[dict] = []
+    for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], results["distances"][0]):
+        candidate = _candidate(doc, meta, dist, "vector")
+        if candidate is None or candidate["key"] in known:
+            continue
+        candidate["vector_rank"] = len(vector_hits) + 1
+        known.add(candidate["key"])
+        vector_hits.append(candidate)
+    pool: List[dict] = list(vector_hits)
+
+    # --- 2. Catalog actions (KB only) ---
+    if is_kb:
+        action_intent = bool(config._ACTION_INTENT.search(query)) or any(
+            c["metadata"].get("category") == config.ACTION_CATEGORY for c in vector_hits
+        )
+        action_limit = config.ACTION_CANDIDATES if action_intent else min(config.ACTION_CANDIDATES, config.ACTION_UNGATED_CANDIDATES)
+        pool += _category_vector(collection, embedding, known, config.ACTION_CATEGORY, action_limit)
+
+        if action_intent and config.ACTION_LEXICAL_CANDIDATES > 0:
+            action_where = {"$and": [{"scope": "global"}, {"category": config.ACTION_CATEGORY}]}
+            action_index = _get_lexical_index(collection, action_where)
+            if action_index is not None:
+                pool += _from_ranking(
+                    action_index, action_index.search(query), known,
+                    config.ACTION_LEXICAL_CANDIDATES, "category_lexical",
+                )
+
+    # --- 3. BM25 on the corpus, ATT&CK expansions, lexical candidates ---
+    expansions = attack_query_expansions(query) if is_kb else []
+    use_expansions = bool(expansions) and config.ATTACK_EXPANSION_CANDIDATES > 0
+    index = _get_lexical_index(collection, where) if (config.LEXICAL_CANDIDATES > 0 or use_expansions) else None
+    ranking = index.search(query) if index is not None else []
+
+    if index is not None:
+        if use_expansions:
+            for expansion in expansions:
+                pool += _from_ranking(
+                    index, index.search(expansion), known,
+                    config.ATTACK_EXPANSION_CANDIDATES, "attack_expansion", expansion,
+                )
+        pool += _from_ranking(index, ranking, known, config.LEXICAL_CANDIDATES, "lexical")
+
+    # --- 4. Cheap pre-selection (RRF dense + BM25) before the cross-encoder ---
+    k = config._RRF_K
+    lexical_rank = {position: rank for rank, (position, _) in enumerate(ranking, start=1)}
+    for c in pool:
+        if index is not None:
+            position = index.position_of(c["key"])
+            c["lexical_corpus_rank"] = lexical_rank.get(position) if position is not None else None
+        score = 0.0
+        if c["vector_rank"]:
+            score += 1.0 / (k + c["vector_rank"])
+        if c["lexical_corpus_rank"]:
+            score += 1.0 / (k + c["lexical_corpus_rank"])
+        c["cheap_score"] = score
+
+    protected = [c for c in pool if c["origin"] in config._PROTECTED_ORIGINS]
+    others = sorted((c for c in pool if c["origin"] not in config._PROTECTED_ORIGINS), key=lambda c: -c["cheap_score"])
+    to_rerank = others[:config.RERANK_POOL_SIZE] + protected
+
+    # --- 5. Cross-encoder only on the reduced pool, then fusion and selection ---
+    reranked = rerank(query, to_rerank, top_k=len(to_rerank))
+    for rank, c in enumerate(reranked, start=1):
+        c["rerank_rank"] = rank
+
+    fused = _fuse(reranked)
+    selected = select_hits(fused, top_k, diversify=is_kb)
+    expand_hits(collection, selected, config.CONTEXT_EXPAND_TOP)
+
+    if diagnostics is not None:
+        diagnostics.update(_diagnostics(pool, selected, expansions, result_kind))
+    return selected
+
+
+# ============================================================
+# API
+# ============================================================
+
 def retrieve(
     query: str,
     customer_id: int,
@@ -306,190 +404,7 @@ def retrieve_with_diagnostics(
     return hits, diagnostics
 
 
-def _retrieve(
-    query: str,
-    customer_id: int,
-    top_k: int,
-    result_kind: Optional[Literal["case", "kb"]],
-    diagnostics: Optional[dict] = None,
-) -> List[dict]:
-    if isinstance(customer_id, bool) or not isinstance(customer_id, int) or customer_id <= 0:
-        raise ValueError("customer_id must be a positive integer for tenant-scoped retrieval")
-
-    # 1. get ChromaDB collection
-    collection = get_collection()
-
-    if collection.count() == 0:
-        if diagnostics is not None:
-            diagnostics.update({"candidate_count": 0, "candidates": []})
-        return []
-
-    # 2. determine candidate count
-    candidate_k = min(max(top_k, config.RERANK_CANDIDATES), collection.count())
-
-    # 3. generate query embedding
-    query_embedding = embed_query(query)
-
-    # 4. ChromaDB vector search
-    if result_kind == "case":
-        where = {
-            "$and": [
-                {"category": "incident_history"},
-                {"customer": customer_id},
-            ]
-        }
-    elif result_kind == "kb":
-        where = {
-            "$and": [
-                {"scope": "global"},
-                {"category": {"$ne": "incident_history"}},
-            ]
-        }
-    else:
-        where = {"$or": [{"scope": "global"}, {"customer": customer_id}]}
-
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=candidate_k,
-        where=where,
-    )
-
-    # build hits
-    hits = []
-    for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], results["distances"][0]):
-        cleaned_doc = clean_retrieval_text(doc)
-        if cleaned_doc:
-            hits.append({"text": cleaned_doc, "metadata": meta, "distance": dist})
-
-    # 5. reranking: vector candidates, targeted action and ATT&CK lexical candidates, then full-corpus BM25 candidates
-    vector_keys = {_hit_key(hit) for hit in hits}
-    known_keys = set(vector_keys)
-    action_only: List[dict] = []
-    action_lexical_only: List[dict] = []
-    if result_kind != "case":
-        action_only = category_candidates(
-            collection, query_embedding, known_keys, config.ACTION_CATEGORY, config.ACTION_CANDIDATES
-        )
-        if config.ACTION_LEXICAL_CANDIDATES > 0:
-            action_where = {
-                "$and": [
-                    {"scope": "global"},
-                    {"category": config.ACTION_CATEGORY},
-                ]
-            }
-            action_index = _get_lexical_index(collection, action_where)
-            if action_index is not None:
-                action_lexical_only, _ = lexical_candidates(
-                    action_index, query, known_keys, config.ACTION_LEXICAL_CANDIDATES
-                )
-    attack_expansions = attack_query_expansions(query) if result_kind != "case" else []
-    expansion_only: List[dict] = []
-    if attack_expansions and config.ATTACK_EXPANSION_CANDIDATES > 0:
-        expansion_index = _get_lexical_index(collection, where)
-        if expansion_index is not None:
-            expansion_only = attack_expansion_candidates(
-                expansion_index,
-                attack_expansions,
-                known_keys,
-                config.ATTACK_EXPANSION_CANDIDATES,
-            )
-    action_keys = {_hit_key(hit) for hit in action_only}
-    action_lexical_keys = {_hit_key(hit) for hit in action_lexical_only}
-    expansion_keys = {_hit_key(hit) for hit in expansion_only}
-    lexical_index = (
-        _get_lexical_index(collection, where)
-        if config.LEXICAL_CANDIDATES > 0 or (attack_expansions and config.ATTACK_EXPANSION_CANDIDATES > 0)
-        else None
-    )
-    lexical_only: List[dict] = []
-    lexical_ranking: List[Tuple[int, float]] = []
-    if lexical_index is not None and config.LEXICAL_CANDIDATES > 0:
-        lexical_only, lexical_ranking = lexical_candidates(
-            lexical_index, query, known_keys, config.LEXICAL_CANDIDATES
-        )
-    if lexical_index is not None and not lexical_ranking:
-        lexical_ranking = lexical_index.search(query)
-    pool = hits + action_only + action_lexical_only + expansion_only + lexical_only
-    reranked_hits = rerank(query, pool, top_k=len(pool))
-    if lexical_index is not None:
-        lexical_hits = order_by_lexical_score(pool, lexical_index, lexical_ranking)
-    else:
-        lexical_hits = lexical_rank(query, pool)
-    fused_hits = fuse_rankings(hits, reranked_hits, lexical_hits)
-    ranked_hits = select_hits(fused_hits, top_k)
-    expand_hits(collection, ranked_hits, config.CONTEXT_EXPAND_TOP)
-    if diagnostics is not None:
-        vector_ranks = {_hit_key(hit): rank for rank, hit in enumerate(hits, start=1)}
-        rerank_ranks = {
-            _hit_key(hit): rank for rank, hit in enumerate(reranked_hits, start=1)
-        }
-        lexical_ranks = {
-            _hit_key(hit): rank for rank, hit in enumerate(lexical_hits, start=1)
-        }
-        fused_ranks = {
-            _hit_key(hit): rank for rank, hit in enumerate(fused_hits, start=1)
-        }
-        returned_ranks = {
-            _hit_key(hit): rank for rank, hit in enumerate(ranked_hits, start=1)
-        }
-        corpus_lexical_ranks = {}
-        if lexical_index is not None:
-            position_ranks = {position: rank for rank, (position, _) in enumerate(lexical_ranking, start=1)}
-            corpus_lexical_ranks = {
-                key: position_ranks.get(lexical_index.position_of(key))
-                for key in (_hit_key(hit) for hit in pool)
-            }
-        candidates = []
-        for hit in pool:
-            key = _hit_key(hit)
-            metadata = hit["metadata"]
-            candidate = {
-                "id": key,
-                "source": metadata.get("source", ""),
-                "title": metadata.get("title") or metadata.get("source", ""),
-                "origin": (
-                    "vector" if key in vector_ranks
-                    else "category" if key in action_keys
-                    else "category_lexical" if key in action_lexical_keys
-                    else "attack_expansion" if key in expansion_keys
-                    else "lexical"
-                ),
-                "distance": None if hit["distance"] is None else float(hit["distance"]),
-                "rerank_score": hit.get("rerank_score"),
-                "fused_score": hit.get("fused_score"),
-                "vector_rank": vector_ranks.get(key),
-                "rerank_rank": rerank_ranks.get(key),
-                "lexical_rank": lexical_ranks.get(key),
-                "lexical_corpus_rank": corpus_lexical_ranks.get(key),
-                "fused_rank": fused_ranks.get(key),
-                "returned_rank": returned_ranks.get(key),
-            }
-            if hit.get("matched_expansion"):
-                candidate["matched_expansion"] = hit["matched_expansion"]
-            if result_kind == "kb":
-                candidate["text"] = hit["text"]
-            candidates.append(candidate)
-        diagnostics.update(
-            {
-                "candidate_count": len(candidates),
-                "category_added": len(action_only),
-                "category_lexical_added": len(action_lexical_only),
-                "attack_expansion_added": len(expansion_only),
-                "attack_expansions": attack_expansions,
-                "lexical_added": len(lexical_only),
-                "candidates": candidates,
-            }
-        )
-
-    return ranked_hits
-
-
-def retrieve_results(
-    query: str,
-    customer_id: int,
-    k_cases: int,
-    k_kb: int,
-) -> List[dict]:
+def retrieve_results(query: str, customer_id: int, k_cases: int, k_kb: int) -> List[dict]:
     results, _ = _retrieve_results(query, customer_id, k_cases, k_kb)
     return results
 
@@ -512,33 +427,24 @@ def _retrieve_results(
     k_kb: int,
     diagnostics: Optional[Dict[str, dict]] = None,
 ) -> Tuple[List[dict], Dict[str, dict]]:
-    if isinstance(customer_id, bool) or not isinstance(customer_id, int) or customer_id <= 0:
-        raise ValueError("customer_id must be a positive integer for tenant-scoped retrieval")
+    _validate_customer(customer_id)
     if not isinstance(query, str) or not query.strip():
         raise ValueError("query must be a non-empty string")
     for name, limit in (("k_cases", k_cases), ("k_kb", k_kb)):
         if isinstance(limit, bool) or not isinstance(limit, int) or not 0 <= limit <= 100:
             raise ValueError(f"{name} must be an integer between 0 and 100")
 
+    embedding = embed_query(query) if (k_cases or k_kb) else None
+
     results = []
     for result_kind, limit in (("case", k_cases), ("kb", k_kb)):
         if limit == 0:
             continue
-        if diagnostics is None:
-            hits = retrieve(
-                query,
-                customer_id=customer_id,
-                top_k=limit,
-                result_kind=result_kind,
-            )
-        else:
-            hits, kind_diagnostics = retrieve_with_diagnostics(
-                query,
-                customer_id=customer_id,
-                top_k=limit,
-                result_kind=result_kind,
-            )
+        kind_diagnostics: Optional[dict] = {} if diagnostics is not None else None
+        hits = _retrieve(query, customer_id, limit, result_kind, kind_diagnostics, embedding)
+        if diagnostics is not None:
             diagnostics[result_kind] = kind_diagnostics
+
         for hit in hits:
             metadata = hit["metadata"]
             record_id = metadata.get("record_id")
@@ -558,4 +464,4 @@ def _retrieve_results(
                 }
             )
 
-    return sorted(results, key=lambda result: result["score"], reverse=True), diagnostics or {}
+    return sorted(results, key=lambda r: r["score"], reverse=True), diagnostics or {}

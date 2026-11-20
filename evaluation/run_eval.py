@@ -44,11 +44,12 @@ def _validate_judgment(query_id: str, judgment: Any) -> None:
     for field in ("title_contains", "text_contains"):
         if field in judgment and not _non_empty_text(judgment[field]):
             raise ValueError(f"{query_id}: {field} must be a non-empty string")
-    if "technique_id" in judgment and (
-        not isinstance(judgment["technique_id"], str)
-        or not re.fullmatch(r"T\d{4}(?:[._]\d{3})?", judgment["technique_id"], re.IGNORECASE)
-    ):
-        raise ValueError(f"{query_id}: technique_id must be a MITRE ATT&CK ID such as T1059.001")
+    for field in ("technique_id", "technique_family"):
+        if field in judgment and (
+            not isinstance(judgment[field], str)
+            or not re.fullmatch(r"T\d{4}(?:[._]\d{3})?", judgment[field], re.IGNORECASE)
+        ):
+            raise ValueError(f"{query_id}: {field} must be a MITRE ATT&CK ID such as T1059.001")
 
 
 def validate_dataset(data: Mapping[str, Any]) -> None:

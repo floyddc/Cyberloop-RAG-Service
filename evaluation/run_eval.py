@@ -202,11 +202,18 @@ def evaluate(
     retrieve: Retrieve,
     ks: Sequence[int],
     diagnostics_retrieve: Optional[RetrieveWithDiagnostics] = None,
+    progress: bool = False,
 ) -> Dict[str, Any]:
     deepest = max(ks)
     rows: List[Dict[str, Any]] = []
     diagnostic_rows: List[dict] = []
-    for query in queries:
+    for index, query in enumerate(queries, start=1):
+        if progress:
+            print(
+                f"Evaluating query {index}/{len(queries)}: {query['id']}",
+                file=sys.stderr,
+                flush=True,
+            )
         judgments = {
             kind: [judgment for judgment in query["relevant"] if judgment["type"] == kind]
             for kind in KINDS
@@ -413,6 +420,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             client.retrieve,
             ks,
             diagnostics_retrieve=client.retrieve_with_diagnostics if args.diagnostics else None,
+            progress=True,
         )
     except RuntimeError as error:
         print(f"error: {error}", file=sys.stderr)
@@ -420,7 +428,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     finally:
         cleanup_cases(client, seeded)
 
-    print(format_report(report))
+    print(format_report(report), flush=True)
     if args.output:
         args.output.write_text(
             json.dumps({key: value for key, value in report.items() if key != "diagnostics"},

@@ -1,5 +1,5 @@
 {
-  "description": "Retrieval quality dataset. Judgments locate results by title/text because KB ids are DB serials; MITRE techniques use the canonical technique_id matcher. Grades: 2 = primary answer, 1 = useful supporting context.",
+  "description": "Retrieval quality dataset with curated synthetic evaluation queries. Judgments locate results by title/text because KB ids are DB serials; MITRE techniques use the canonical technique_id matcher. Grades: 2 = primary answer, 1 = useful supporting context. Validate synthetic judgments with SOC analysts before using scores as a production-quality claim.",
   "fixture_cases": [
     {
       "customer": 900001,
@@ -262,6 +262,557 @@
       "query": "block execution of a known malicious file hash through edr",
       "relevant": [
         {"type": "kb", "text_contains": "block_hash", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-spearphishing-link",
+      "customer": 900001,
+      "query": "Several employees received a fake document-sharing email; the link opened a credential-harvesting page controlled by the sender.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1566.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-malicious-link-execution",
+      "customer": 900001,
+      "query": "A user clicked a shortened link and was prompted to open a downloaded file that launched code on the workstation.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1204.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-windows-command-shell",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Suspicious command interpreter launched by an Office process",
+        "alert_description": "WINWORD spawned cmd.exe with a chained command that downloaded and executed a script.",
+        "alert_customer_id": 900001,
+        "alert_iocs": [
+          {"ioc_value": "cmd.exe /c", "ioc_type": "command"}
+        ]
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1059.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-unix-shell",
+      "customer": 900001,
+      "query": "An unexpected bash process ran a sequence of shell commands from a web server account and spawned a reverse connection.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1059.004", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-python-execution",
+      "customer": 900001,
+      "query": "A temporary Python script executed on a Linux host and fetched additional commands from an external server.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1059.006", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-ingress-tool-transfer",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Previously unseen executable downloaded to a server",
+        "alert_description": "A process transferred an executable from an external host into a temporary directory shortly before suspicious activity.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1105", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-smb-admin-share",
+      "customer": 900001,
+      "query": "The same account copied a binary to several Windows hosts using the hidden ADMIN$ share and launched it remotely.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1021.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-ssh-lateral-access",
+      "customer": 900001,
+      "query": "A compromised Linux account used SSH keys to log in from one internal server to several other servers.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1021.004", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-sam-hive-dump",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Registry hive containing local account hashes copied",
+        "alert_description": "A process saved the SAM hive and related registry data to an unexpected directory on a Windows endpoint.",
+        "alert_customer_id": 900001,
+        "alert_iocs": [
+          {"ioc_value": "reg save HKLM\\SAM", "ioc_type": "command"}
+        ]
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1003.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-ntds-database-copy",
+      "customer": 900001,
+      "query": "A domain controller's NTDS database was copied after a shadow copy was created outside the backup window.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1003.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-dcsync",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unusual directory replication request from a workstation",
+        "alert_description": "A non-domain-controller account requested replication of directory secrets using directory synchronization rights.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1003.006", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-golden-ticket",
+      "customer": 900001,
+      "query": "Kerberos authentication used a forged ticket-granting ticket with an anomalous lifetime and privileged group membership.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1558.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-silver-ticket",
+      "customer": 900001,
+      "query": "A service accepted a forged Kerberos service ticket even though the domain controller showed no corresponding ticket request.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1558.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-asrep-roasting",
+      "customer": 900001,
+      "query": "An account without Kerberos pre-authentication enabled received repeated AS-REP responses that were then cracked offline.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1558.004", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-windows-service-persistence",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unexpected service registered to launch from a user-writable path",
+        "alert_description": "A new Windows service was configured with automatic startup and an executable under ProgramData.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1543.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-wmi-event-subscription",
+      "customer": 900001,
+      "query": "An attacker created a permanent WMI event filter and consumer that launches a script when a system event occurs.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1546.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-dll-search-order",
+      "customer": 900001,
+      "query": "A trusted application loaded a malicious library from a directory searched before the legitimate system library location.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1574.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-process-hollowing",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Process memory differs from the image loaded on disk",
+        "alert_description": "A process was created suspended, its original memory was replaced, and execution resumed under the trusted process name.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1055.012", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-disable-security-tools",
+      "customer": 900001,
+      "query": "Endpoint protection services and security event collection were disabled immediately before suspicious file activity.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1562.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-file-deletion-evasion",
+      "customer": 900001,
+      "query": "An intruder deleted downloaded payloads and temporary files after execution to remove evidence from the host.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1070.004", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-password-guessing",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Repeated password guesses against one remote account",
+        "alert_description": "Hundreds of distinct passwords were attempted against a single account over a short period, followed by a successful login.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1110.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-account-manipulation",
+      "customer": 900001,
+      "query": "A compromised identity had new authentication factors and alternate credentials added without an approved change request.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1098", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-create-local-account",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "New local administrator account created outside deployment",
+        "alert_description": "A local account was added to the Administrators group on a workstation with no matching service ticket.",
+        "alert_customer_id": 900001,
+        "alert_iocs": [
+          {"ioc_value": "net user /add", "ioc_type": "command"}
+        ]
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1136.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-domain-account-discovery",
+      "customer": 900001,
+      "query": "After gaining access, the actor enumerated user accounts and privileged groups across the Active Directory domain.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1087.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-remote-system-discovery",
+      "customer": 900001,
+      "query": "A workstation queried the network for remote computer names and reachable systems before making lateral connections.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1018", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-network-connection-discovery",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Command-line collection of active network sessions",
+        "alert_description": "An unusual process listed established TCP connections, listening ports, and associated process identifiers.",
+        "alert_customer_id": 900001,
+        "alert_iocs": [
+          {"ioc_value": "netstat -ano", "ioc_type": "command"}
+        ]
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1049", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-user-identity-discovery",
+      "customer": 900001,
+      "query": "A newly launched shell ran whoami and queried the current user's group memberships and privileges.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1033", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-process-discovery",
+      "customer": 900001,
+      "query": "An unexpected script enumerated running processes on an endpoint before selecting security and backup services.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1057", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-system-information-discovery",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "System inventory command executed by an interactive shell",
+        "alert_description": "The process collected operating system version, hardware details, and installed hotfix information.",
+        "alert_customer_id": 900001,
+        "alert_iocs": [
+          {"ioc_value": "systeminfo", "ioc_type": "command"}
+        ]
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1082", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-network-configuration-discovery",
+      "customer": 900001,
+      "query": "A suspicious process collected IP addresses, DNS settings, routes, and interface configuration from the host.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1016", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-exfiltration-over-c2",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Large outbound transfer over an established command channel",
+        "alert_description": "A compromised host sent collected archive data to the same external endpoint used for periodic command traffic.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1041", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-unencrypted-protocol-exfiltration",
+      "customer": 900001,
+      "query": "Sensitive files were uploaded to an external FTP server over a clear-text connection unrelated to the command channel.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1048.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-archive-utility",
+      "customer": 900001,
+      "query": "A command-line archiver bundled documents from several user folders into a password-protected archive before upload.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1560.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-automated-exfiltration",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Repeated scheduled uploads from a compromised endpoint",
+        "alert_description": "A script automatically transferred newly modified files to an external destination at regular intervals.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1020", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-automated-collection",
+      "customer": 900001,
+      "query": "A script searched shared drives for files matching financial keywords and copied every match into a staging directory.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1119", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-local-data-collection",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Sensitive local files copied by an untrusted process",
+        "alert_description": "A process read browser profiles and locally stored documents from a user's workstation before outbound traffic increased.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1005", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-archive-library",
+      "customer": 900001,
+      "query": "A custom implant used an in-process compression library to package collected data without starting a known archive utility.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1560.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-web-protocol-c2",
+      "customer": 900001,
+      "query": "The implant exchanged command requests and responses with its controller using periodic HTTPS traffic that resembled normal web browsing.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1071.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-ftp-protocol-c2",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Command traffic tunneled through an unexpected FTP session",
+        "alert_description": "A suspicious process used FTP requests and responses to receive tasks and return command output.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1071.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-asymmetric-encrypted-channel",
+      "customer": 900001,
+      "query": "Network analysis found the implant negotiating an encrypted channel with public-key cryptography to conceal its command traffic.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1573.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-web-service-c2",
+      "customer": 900001,
+      "query": "A compromised host exchanged commands and results through a public web service account controlled by the actor.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1102.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-multihop-proxy",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Outbound session traversed multiple proxy relays",
+        "alert_description": "Connections from the endpoint passed through a chain of externally hosted proxy nodes before reaching the destination.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1090.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-vps-infrastructure",
+      "customer": 900001,
+      "query": "Threat intelligence linked the command server to a newly rented virtual private server registered by the suspected operator.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1583.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-domain-generation",
+      "customer": 900001,
+      "query": "The malware generated many changing subdomains from a deterministic algorithm and contacted a different one each day.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1568.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-data-destruction",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Wiper activity overwrote business files",
+        "alert_description": "A process replaced the contents of files across several volumes with random data, leaving them unrecoverable.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1485", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-system-shutdown",
+      "customer": 900001,
+      "query": "Immediately after destructive activity, an attacker issued a command to shut down several affected servers.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1529", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-uac-bypass",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unexpected elevated process spawned without a consent prompt",
+        "alert_description": "A user-level process changed a registry setting used by an auto-elevated Windows utility and launched a privileged payload.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1548.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "mitre-mshta-proxy-execution",
+      "customer": 900001,
+      "query": "An email attachment caused mshta.exe to open a remote HTA file and execute its embedded script.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1218.005", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-block-ip",
+      "customer": 900001,
+      "query": "Prevent endpoints from reaching the confirmed command-and-control IP address at the perimeter firewall.",
+      "relevant": [
+        {"type": "kb", "text_contains": "block_ip", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-block-network-traffic",
+      "customer": 900001,
+      "query": "Stop outbound connections to the suspicious host and port across the affected network segment.",
+      "relevant": [
+        {"type": "kb", "text_contains": "block_network_traffic", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-block-url",
+      "customer": 900001,
+      "query": "Add the confirmed malicious landing-page address to the secure web gateway deny list.",
+      "relevant": [
+        {"type": "kb", "text_contains": "block_url", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-enable-tls-inspection",
+      "customer": 900001,
+      "query": "Inspect encrypted outbound sessions in the affected server group to identify hidden command traffic.",
+      "relevant": [
+        {"type": "kb", "text_contains": "enable_ssl_tls_inspection", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-collect-endpoint-artifacts",
+      "customer": 900001,
+      "query": "Gather process lists, autoruns, event logs, network connections, and suspicious files from the affected workstation.",
+      "relevant": [
+        {"type": "kb", "text_contains": "collect_endpoint_artifacts", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-revoke-sessions",
+      "customer": 900001,
+      "query": "Invalidate the compromised employee's active sign-in sessions and refresh tokens immediately.",
+      "relevant": [
+        {"type": "kb", "text_contains": "revoke_sessions", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-reset-credentials",
+      "customer": 900001,
+      "query": "Force a password change for the confirmed compromised privileged account.",
+      "relevant": [
+        {"type": "kb", "text_contains": "reset_credentials", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-quarantine-file",
+      "customer": 900001,
+      "query": "Move the confirmed malicious attachment into EDR quarantine so it cannot be opened again.",
+      "relevant": [
+        {"type": "kb", "text_contains": "quarantine_file", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-notify-analyst",
+      "customer": 900001,
+      "query": "Escalate this uncertain high-impact alert to a human SOC analyst without taking an automated containment action.",
+      "relevant": [
+        {"type": "kb", "text_contains": "notify_analyst", "grade": 2}
+      ]
+    },
+    {
+      "id": "action-no-action",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Approved vulnerability scan generated port-scan detections",
+        "alert_description": "The source matches the registered internal scanner and the activity occurred during its authorized weekly scan window.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "no_action", "grade": 2}
       ]
     }
   ]

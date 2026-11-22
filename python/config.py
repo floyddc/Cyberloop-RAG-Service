@@ -10,8 +10,10 @@ POSTGRES_KNOWLEDGE_DB = os.environ.get("POSTGRES_KNOWLEDGE_DB", "knowledge")
 COLLECTION_NAME = "cyber_response_kb"
 
 # RERANKER & EMBEDDER ----------------------------------------------------------------------------------------------------------------------------------------------------------     
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")    # da cambiare se non gira bene in locale (alternativa leggera: intfloat/multilingual-e5-small)
-RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")            # da cambiare se non gira bene in locale (alternativa leggera: cross-encoder/ms-marco-MiniLM-L2-v2)
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")    # change it if it doesn't work well locally (light alternative: intfloat/multilingual-e5-small)
+RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")            # change it if it doesn't work well locally (light alternative: cross-encoder/ms-marco-MiniLM-L2-v2)
+EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE", "cpu")    # cpu | cuda | auto (torch is required for cuda)
+RERANKER_DEVICE = os.environ.get("RERANKER_DEVICE", "cpu")      # cpu | cuda | auto (torch is required for cuda)
 CHUNK_SIZE = 300
 CHUNK_OVERLAP = 50
 TOP_K = 5
@@ -149,11 +151,11 @@ _LEXICAL_STOP_WORDS = {
 _K1 = 1.2
 _B = 0.75
 _VOWELS = "aeiou"
-RERANK_POOL_SIZE = 36                    # candidati "normali" mandati al cross-encoder
-ACTION_UNGATED_CANDIDATES = 4              # azioni nel pool quando la query non chiede una risposta
+RERANK_POOL_SIZE = int(os.environ.get("RERANK_POOL_SIZE", "48"))   # "normal" candidates sent to the cross-encoder (36 was cutting valid lexical candidates)
+ACTION_UNGATED_CANDIDATES = int(os.environ.get("ACTION_UNGATED_CANDIDATES", "4"))              # actions in the pool when the query does not ask for a response
 _PROTECTED_ORIGINS = {"category", "category_lexical", "attack_expansion"}
 _ACTION_INTENT = re.compile(
     r"\b(?:isolat\w*|block\w*|disabl\w*|kill\w*|terminat\w*|quarantin\w*|captur\w*|"
-    r"revok\w*|reset\w*|contain\w*|remediat\w*)\b",
+    r"revok\w*|reset\w*|contain\w*|remediat\w*|approv\w*|authori[sz]\w*|benign|false[ -]positive|expected|whitelist\w*|allowlist\w*)\b",
     re.IGNORECASE,
 )

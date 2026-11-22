@@ -1,5 +1,6 @@
 from typing import List
 import config
+from .device import resolve_device
 
 _model = None
 
@@ -7,7 +8,11 @@ def _get_model():
     global _model
     if _model is None:
         from sentence_transformers import CrossEncoder
-        _model = CrossEncoder(config.RERANKER_MODEL, device="cpu", cache_folder=config.CACHE_DIR)
+        _model = CrossEncoder(
+            config.RERANKER_MODEL,
+            device=resolve_device(config.RERANKER_DEVICE),
+            cache_folder=config.CACHE_DIR,
+        )
     return _model
 
 

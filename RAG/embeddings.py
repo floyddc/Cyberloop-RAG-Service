@@ -1,6 +1,7 @@
 import os
 from typing import List
 import config
+from .device import resolve_device
 
 
 _model = None
@@ -12,7 +13,7 @@ def _get_model():
 
         _model = SentenceTransformer(
             config.EMBEDDING_MODEL,
-            device="cpu",
+            device=resolve_device(config.EMBEDDING_DEVICE),
             model_kwargs={"cache_dir": config.CACHE_DIR},
         )
     return _model

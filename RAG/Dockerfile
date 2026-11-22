@@ -6,12 +6,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     KNOWLEDGE_DIR=/app/knowledge \
     CACHE_DIR=/models
 
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+ARG TORCH_SPEC=torch==2.14.0+cpu
+
 WORKDIR /app
 
 COPY RAG/service-requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir \
-        --index-url https://download.pytorch.org/whl/cpu \
-        torch==2.14.0+cpu \
+        --index-url ${TORCH_INDEX_URL} \
+        ${TORCH_SPEC} \
     && pip install --no-cache-dir -r /tmp/requirements.txt
     
 COPY RAG /app/RAG

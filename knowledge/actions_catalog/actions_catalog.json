@@ -134,7 +134,7 @@
     },
     {
       "action": "no_action",
-      "description": "No remediation required, close as benign/false positive.",
+      "description": "No remediation required, close as benign/false positive. Use when the activity is approved, authorized, expected or allowlisted (for example a registered internal scanner running in its authorized scan window or maintenance window) and no containment is needed.",
       "required_fields": [],
       "max_auto_severity": "critical"
     }

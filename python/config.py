@@ -137,6 +137,12 @@ _LOG_VALUE_PATTERN = re.compile(
     r"(?=\s+(?:file|path|process|image|sha1|sha256|sha512|ip|storyline|site)\s*:|$)",
     re.IGNORECASE,
 )
+NO_ACTION_NAME = "no_action"
+_BENIGN_INTENT = re.compile(
+    r"\b(?:approved|authori[sz]ed|sanctioned|registered|whitelisted|allowlisted|benign|"
+    r"false[ -]positive|expected (?:activity|behaviou?r)|scheduled (?:scan|maintenance)|maintenance window)\b",
+    re.IGNORECASE,
+)
 _TITLE_PATTERN = re.compile(r"^#\s*(?P<title>.+?)(?:\s+##\s|\s*\?(?:\s|$)|$)")
 _RRF_K = 60
 _TECHNIQUE_ID = re.compile(r"(?<![A-Za-z0-9])[Tt](\d{4})(?:[._](\d{3}))?(?!\d)")
@@ -156,6 +162,6 @@ ACTION_UNGATED_CANDIDATES = int(os.environ.get("ACTION_UNGATED_CANDIDATES", "4")
 _PROTECTED_ORIGINS = {"category", "category_lexical", "attack_expansion"}
 _ACTION_INTENT = re.compile(
     r"\b(?:isolat\w*|block\w*|disabl\w*|kill\w*|terminat\w*|quarantin\w*|captur\w*|"
-    r"revok\w*|reset\w*|contain\w*|remediat\w*|approv\w*|authori[sz]\w*|benign|false[ -]positive|expected|whitelist\w*|allowlist\w*)\b",
+    r"revok\w*|reset\w*|contain\w*|remediat\w*)\b",
     re.IGNORECASE,
 )

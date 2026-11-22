@@ -139,6 +139,24 @@ def _category_vector(collection, embedding: List[float], known: set, category: s
     return added
 
 
+def _named_action(collection, name: str, known: set) -> List[dict]:
+    try:
+        found = collection.get(
+            where={"$and": [{"scope": "global"}, {"category": config.ACTION_CATEGORY}]},
+            include=["documents", "metadatas"],
+        )
+    except Exception:
+        logger.warning("Could not load catalog action %s", name, exc_info=True)
+        return []
+    for doc, meta in zip(found["documents"], found["metadatas"]):
+        if str((meta or {}).get("source", "")).endswith(f"#{name}"):
+            candidate = _candidate(doc, meta, None, "category_lexical")
+            if candidate is not None and candidate["key"] not in known:
+                known.add(candidate["key"])
+                return [candidate]
+    return []
+
+
 # ============================================================
 # Fusion and selection
 # ============================================================
@@ -332,6 +350,9 @@ def _retrieve(
                     action_index, action_index.search(query), known,
                     config.ACTION_LEXICAL_CANDIDATES, "category_lexical",
                 )
+
+        if config._BENIGN_INTENT.search(query):
+            pool += _named_action(collection, config.NO_ACTION_NAME, known)
 
     # --- 3. BM25 on the corpus, ATT&CK expansions, lexical candidates ---
     expansions = attack_query_expansions(query) if is_kb else []

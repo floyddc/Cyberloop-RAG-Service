@@ -1,5 +1,5 @@
 {
-  "description": "Retrieval quality dataset with curated synthetic evaluation queries. Judgments locate results by title/text because KB ids are DB serials; MITRE techniques use the canonical technique_id matcher. Grades: 2 = primary answer, 1 = useful supporting context. Validate synthetic judgments with SOC analysts before using scores as a production-quality claim.",
+  "description": "Development set of 80 retrieval queries used during iteration. Judgments locate results by title/text because KB ids are DB serials; MITRE techniques use the canonical technique_id matcher. Grades: 2 = primary answer, 1 = useful supporting context. See test_dataset.json for a separate, synthetic held-out set; validate judgments with SOC analysts before production-quality claims.",
   "fixture_cases": [
     {
       "customer": 900001,

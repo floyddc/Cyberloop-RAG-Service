@@ -1,0 +1,492 @@
+{
+  "description": "Held-out synthetic KB retrieval set (40 queries). Do not use this set to tune retrieval parameters; use dataset.json as the development set. Queries and judgments are curated from ATT&CK concepts and the action catalog, but have not been independently validated by SOC analysts.",
+  "queries": [
+    {
+      "id": "test-wmi-remote-execution",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unusual WMI process creation on a workstation",
+        "alert_description": "A remote management process used Windows Management Instrumentation to start an unsigned command interpreter on a second endpoint.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1047", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-native-api-calls",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "A program invoked low-level operating-system functions directly instead of using the normal high-level API wrappers.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1106", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-regsvr32-scriptlet",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Regsvr32 loaded a remote scriptlet",
+        "alert_description": "The signed Windows utility regsvr32.exe contacted an external server and registered a scriptlet from a remote URL.",
+        "alert_customer_id": 900001,
+        "alert_iocs": [
+          {"ioc_value": "regsvr32.exe", "ioc_type": "process"}
+        ]
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1218.010", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-service-execution",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "An operator created a temporary Windows service on a remote host, started it to run a payload, then removed the service.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1569.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-winrm-lateral-movement",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unexpected remote PowerShell session",
+        "alert_description": "A compromised account opened a WinRM session from one internal Windows server to another and executed commands remotely.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1021.006", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-credentials-in-files",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Configuration files on a shared workstation contained clear-text service passwords that were read by an unauthorized process.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1552.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-timestomped-file",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Executable modification-time mismatch",
+        "alert_description": "A file's creation and modification timestamps were changed to make the executable appear older than its actual deployment.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1070.006", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-masquerading-filename",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "A binary with a filename and icon resembling a legitimate operating-system component was launched from a user-writable directory.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1036.005", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-dns-command-channel",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Periodic DNS requests from an unknown process",
+        "alert_description": "A workstation repeatedly queried unusual DNS record names and received encoded responses from an external resolver.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1071.004", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-exfiltration-code-repository",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "A developer token was used to upload proprietary source files from a compromised endpoint into an attacker-controlled code-hosting repository.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1567.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-accessibility-feature-persistence",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Accessibility binary launched before sign-in",
+        "alert_description": "A debugger setting was changed so an unexpected program started when a Windows accessibility feature was invoked at the logon screen.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1546.008", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-rootkit-kernel-component",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Endpoint telemetry suggests a hidden kernel component is intercepting system activity and concealing its files and processes.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1014", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-hidden-directory",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Payload stored in concealed directory",
+        "alert_description": "An attacker created a hidden directory under a shared profile and placed executable files there to reduce visibility during routine inspection.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1564.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-setuid-elevation",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "A Linux binary's permission bits were altered to grant an unprivileged user elevated execution through its owner identity.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1548.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-keylogging-input-capture",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unexpected keyboard input collection",
+        "alert_description": "A process installed a low-level keyboard hook and wrote captured keystrokes to a file outside the user's profile.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1056.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-browser-credential-theft",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "An untrusted process accessed the local browser profile and extracted saved login credentials and authentication data.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1555.003", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-client-side-exploitation",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Document reader crashed before spawning a payload",
+        "alert_description": "A crafted document triggered a vulnerability in a client application, followed by execution of an unexpected child process.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1203", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-public-web-application-exploit",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Internet-facing application logs show a crafted request exploiting a server-side flaw, followed by an unauthorized shell on the web server.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1190", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-remote-email-collection",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Mailbox contents accessed through a remote service",
+        "alert_description": "An account used an email protocol from an unusual location to retrieve messages from multiple folders without the user's normal mail client.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1114.002", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-audio-capture",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "A process accessed the workstation microphone and saved recordings while the user was not participating in a call.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1123", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-session-cookie-theft",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Browser session token copied from profile storage",
+        "alert_description": "A non-browser process read authentication cookie data that could allow the user to be impersonated without entering a password.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1539", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-compute-resource-hijacking",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "CPU and GPU utilization remained high overnight because an unauthorized workload was mining cryptocurrency on the server.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1496.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-internal-proxy",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unexpected internal proxy listener",
+        "alert_description": "A compromised workstation began forwarding connections through a local proxy service to reach systems on a restricted network segment.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1090.001", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-visual-basic-script",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "A .vbs file launched by the user ran a sequence of commands through the Windows Visual Basic scripting host.",
+      "relevant": [
+        {"type": "kb", "technique_id": "T1059.005", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-firewall-disabled",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Host firewall rules changed during an intrusion",
+        "alert_description": "A privileged process disabled host firewall protections and removed rules that blocked inbound remote administration.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "technique_id": "T1562.004", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-monitor-process-network",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Track outbound connections made by each process on the affected laptop to identify which executable is contacting an unknown server.",
+      "relevant": [
+        {"type": "kb", "text_contains": "monitor_process_network_traffic", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-log-unusual-data-flows",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Unusual outbound transfer volume",
+        "alert_description": "Increase network logging and create alerts for abnormal uploads from the affected workstation while the investigation continues.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "log_and_alert_on_unusual_data_flows", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-delete-confirmed-payload",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Remove the confirmed malicious executable from the endpoint after preserving the evidence required by the incident response team.",
+      "relevant": [
+        {"type": "kb", "text_contains": "delete_file", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-on-demand-edr-scan",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Possible malware persistence after initial cleanup",
+        "alert_description": "Start an on-demand endpoint protection scan on the affected host to search for additional malicious files.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "force_edr_scan", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-increase-endpoint-telemetry",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Temporarily collect more process, authentication, and network events from this endpoint so the investigation has better visibility.",
+      "relevant": [
+        {"type": "kb", "text_contains": "increase_endpoint_telemetry", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-contain-and-block-domain",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Confirmed malware beacon from a managed laptop",
+        "alert_description": "The endpoint is actively communicating with a confirmed command server; stop host connectivity and prevent further resolution of the malicious domain.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "isolate_host", "grade": 2},
+        {"type": "kb", "text_contains": "block_domain", "grade": 1}
+      ]
+    },
+    {
+      "id": "test-disable-malicious-persistence",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Disable the confirmed rogue autorun entry and scheduled task that relaunch the payload after reboot.",
+      "relevant": [
+        {"type": "kb", "text_contains": "disable_persistence", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-block-traffic-and-monitor",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Suspicious connection to an external command server",
+        "alert_description": "Block network traffic to the confirmed destination and retain enhanced logs for unusual flows from the affected segment.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "block_network_traffic", "grade": 2},
+        {"type": "kb", "text_contains": "log_and_alert_on_unusual_data_flows", "grade": 1}
+      ]
+    },
+    {
+      "id": "test-escalate-uncertain-alert",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "The evidence is inconclusive and the alert could affect a critical service; send it to a human analyst before taking an automated action.",
+      "relevant": [
+        {"type": "kb", "text_contains": "notify_analyst", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-capture-memory",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Volatile malware evidence may disappear",
+        "alert_description": "Acquire a full memory image from the compromised workstation before restarting it or removing the running implant.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "capture_memory", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-revoke-and-reset-compromised-account",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "A privileged account's credentials were stolen and its tokens are still active; invalidate current sessions and require new credentials.",
+      "relevant": [
+        {"type": "kb", "text_contains": "revoke_sessions", "grade": 2},
+        {"type": "kb", "text_contains": "reset_credentials", "grade": 1}
+      ]
+    },
+    {
+      "id": "test-quarantine-and-block-hash",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Malicious attachment confirmed by analysis",
+        "alert_description": "Prevent the file from opening again and block its verified hash across managed endpoints.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "quarantine_file", "grade": 2},
+        {"type": "kb", "text_contains": "block_hash", "grade": 1}
+      ]
+    },
+    {
+      "id": "test-inspect-encrypted-traffic",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Enable TLS inspection for the affected server group to investigate suspected command traffic hidden inside encrypted sessions.",
+      "relevant": [
+        {"type": "kb", "text_contains": "enable_ssl_tls_inspection", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-benign-approved-maintenance",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "alert": {
+        "alert_title": "Known administrative scan during maintenance",
+        "alert_description": "The activity matches the registered internal compliance scanner, is authorized for this maintenance window, and has no indicators of compromise.",
+        "alert_customer_id": 900001
+      },
+      "relevant": [
+        {"type": "kb", "text_contains": "no_action", "grade": 2}
+      ]
+    },
+    {
+      "id": "test-disable-compromised-account",
+      "split": "test",
+      "provenance": "curated_synthetic",
+      "customer": 900001,
+      "query": "Immediately disable the confirmed compromised employee account in the identity provider to prevent further sign-ins.",
+      "relevant": [
+        {"type": "kb", "text_contains": "disable_account", "grade": 2}
+      ]
+    }
+  ]
+}

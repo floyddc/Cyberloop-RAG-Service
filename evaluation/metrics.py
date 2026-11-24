@@ -1,8 +1,10 @@
 import re
-from math import log2
-from typing import Any, Dict, List, Mapping, Sequence, Tuple
+from math import ceil, log2
+from statistics import median
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 MATCH_FIELDS = ("id", "title_contains", "text_contains", "technique_id", "technique_family")
+_ACTION_IDENTIFIER_PATTERN = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 _TECHNIQUE_ID_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])T(\d{4})(?:[._](\d{3}))?(?![A-Za-z0-9._])",
     re.IGNORECASE,
@@ -53,6 +55,112 @@ def matches(result: Mapping[str, Any], judgment: Mapping[str, Any]) -> bool:
 
 def grade(judgment: Mapping[str, Any]) -> int:
     return int(judgment.get("grade", 1))
+
+
+def is_action_judgment(judgment: Mapping[str, Any]) -> bool:
+    return any(
+        isinstance(judgment.get(field), str)
+        and _ACTION_IDENTIFIER_PATTERN.fullmatch(judgment[field]) is not None
+        for field in ("title_contains", "text_contains")
+    )
+
+
+def is_action_result(result: Mapping[str, Any]) -> bool:
+    title = str(result.get("title", ""))
+    result_id = str(result.get("id", ""))
+    return title.startswith("Action ") or "actions_catalog.json#" in result_id
+
+
+def score_action_retrieval(
+    results: Sequence[Mapping[str, Any]],
+    judgments: Sequence[Mapping[str, Any]],
+    ks: Sequence[int],
+) -> Dict[str, float]:
+    action_judgments = [judgment for judgment in judgments if is_action_judgment(judgment)]
+    if not action_judgments:
+        return {}
+
+    metrics: Dict[str, float] = {}
+    for k in ks:
+        returned_actions = [result for result in results[:k] if is_action_result(result)]
+        gains, _ = rank_results(returned_actions, action_judgments)
+        true_positives = sum(gain > 0 for gain in gains)
+        precision = true_positives / len(returned_actions) if returned_actions else 0.0
+        recall = true_positives / len(action_judgments)
+        metrics[f"action_precision@{k}"] = precision
+        metrics[f"action_recall@{k}"] = recall
+        metrics[f"action_f1@{k}"] = (
+            2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        )
+    return metrics
+
+
+def candidate_recall(
+    candidates: Sequence[Mapping[str, Any]],
+    judgments: Sequence[Mapping[str, Any]],
+    reranked_only: bool = False,
+) -> float:
+    if not judgments:
+        return 0.0
+    available = [
+        candidate for candidate in candidates
+        if not reranked_only or candidate.get("rerank_rank") is not None
+    ]
+    matched_judgments = sum(
+        any(
+            matches(
+                {
+                    "type": judgment["type"],
+                    "id": candidate.get("id"),
+                    "title": candidate.get("title", ""),
+                    "text": candidate.get("text", ""),
+                },
+                judgment,
+            )
+            for candidate in available
+        )
+        for judgment in judgments
+    )
+    return matched_judgments / len(judgments)
+
+
+def no_action_conflict(
+    results: Sequence[Mapping[str, Any]],
+    judgments: Sequence[Mapping[str, Any]],
+    k: int,
+) -> Optional[float]:
+    expects_no_action = any(
+        is_action_judgment(judgment)
+        and any(
+            judgment.get(field) == "no_action"
+            for field in ("title_contains", "text_contains")
+        )
+        for judgment in judgments
+    )
+    if not expects_no_action:
+        return None
+    return float(any(
+        is_action_result(result)
+        and not (
+            str(result.get("title", "")).casefold() == "action no_action"
+            or str(result.get("id", "")).casefold().endswith("#no_action")
+        )
+        for result in results[:k]
+    ))
+
+
+def summarize_latency(values: Sequence[float]) -> Dict[str, float | int]:
+    if not values:
+        return {"queries": 0}
+    ordered = sorted(values)
+    return {
+        "queries": len(ordered),
+        "mean_ms": sum(ordered) / len(ordered),
+        "median_ms": median(ordered),
+        "p95_ms": ordered[max(0, ceil(0.95 * len(ordered)) - 1)],
+        "min_ms": ordered[0],
+        "max_ms": ordered[-1],
+    }
 
 
 def rank_results(

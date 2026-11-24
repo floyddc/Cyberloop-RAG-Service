@@ -4,10 +4,21 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from time import perf_counter
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
-from .metrics import MATCH_FIELDS, matches, mean_metrics, score_ranking
+from .metrics import (
+    MATCH_FIELDS,
+    candidate_recall,
+    is_action_judgment,
+    matches,
+    mean_metrics,
+    no_action_conflict,
+    score_action_retrieval,
+    score_ranking,
+    summarize_latency,
+)
 
 DEFAULT_DATASET = Path(__file__).with_name("dataset.json")
 DEFAULT_URL = "http://localhost:8000"
@@ -197,6 +208,14 @@ def _summarize(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _query_task_type(judgments: Sequence[Mapping[str, Any]]) -> str:
+    has_action = any(is_action_judgment(judgment) for judgment in judgments)
+    has_other = any(not is_action_judgment(judgment) for judgment in judgments)
+    if has_action and has_other:
+        return "mixed"
+    return "actions" if has_action else "knowledge"
+
+
 def evaluate(
     queries: Sequence[Mapping[str, Any]],
     retrieve: Retrieve,
@@ -207,6 +226,7 @@ def evaluate(
     deepest = max(ks)
     rows: List[Dict[str, Any]] = []
     diagnostic_rows: List[dict] = []
+    latency_rows: List[dict] = []
     for index, query in enumerate(queries, start=1):
         if progress:
             print(
@@ -221,33 +241,56 @@ def evaluate(
         k_cases = deepest if judgments["case"] else 0
         k_kb = deepest if judgments["kb"] else 0
         diagnostic_response = None
+        started = perf_counter()
         if diagnostics_retrieve is None:
             results = retrieve(query, k_cases, k_kb)
         else:
             diagnostic_response = diagnostics_retrieve(query, k_cases, k_kb)
             results = diagnostic_response["results"]
-            diagnostic_rows.append(
-                _format_query_diagnostic(query, judgments["kb"], diagnostic_response)
+        latency_ms = (perf_counter() - started) * 1000
+        latency_rows.append({"query": query["id"], "latency_ms": latency_ms})
+        query_diagnostic = None
+        if diagnostic_response is not None:
+            query_diagnostic = _format_query_diagnostic(
+                query, judgments["kb"], diagnostic_response
             )
+            diagnostic_rows.append(query_diagnostic)
         for kind in KINDS:
             if not judgments[kind]:
                 continue
             ranked = [result for result in results if result.get("type") == kind][:deepest]
             metrics, missed = score_ranking(ranked, judgments[kind], ks)
-            rows.append(
-                {
-                    "query": query["id"],
-                    "kind": kind,
-                    "relevant": len(judgments[kind]),
-                    "returned": len(ranked),
-                    "metrics": metrics,
-                    "missed": missed,
-                    "top": [
-                        {"id": r.get("id"), "title": r.get("title"), "score": r.get("score")}
-                        for r in ranked[:3]
-                    ],
+            action_metrics = score_action_retrieval(ranked, judgments[kind], ks)
+            row = {
+                "query": query["id"],
+                "kind": kind,
+                "input_type": "alert" if "alert" in query else "text_query",
+                "task_type": "cases" if kind == "case" else _query_task_type(judgments[kind]),
+                "relevant": len(judgments[kind]),
+                "returned": len(ranked),
+                "latency_ms": latency_ms,
+                "metrics": metrics,
+                "missed": missed,
+                "top": [
+                    {"id": r.get("id"), "title": r.get("title"), "score": r.get("score")}
+                    for r in ranked[:3]
+                ],
+            }
+            if action_metrics:
+                row["action_metrics"] = action_metrics
+                row["no_action_conflict"] = {
+                    f"no_action_conflict_rate@{k}": no_action_conflict(
+                        ranked, judgments[kind], k
+                    )
+                    for k in ks
+                    if no_action_conflict(ranked, judgments[kind], k) is not None
                 }
-            )
+            if kind == "kb" and query_diagnostic is not None:
+                row["candidate_metrics"] = {
+                    "candidate_recall": query_diagnostic["candidate_recall"],
+                    "reranked_recall": query_diagnostic["reranked_recall"],
+                }
+            rows.append(row)
 
     summary = {
         kind: _summarize([row for row in rows if row["kind"] == kind])
@@ -255,7 +298,53 @@ def evaluate(
         if any(row["kind"] == kind for row in rows)
     }
     summary["all"] = _summarize(rows)
-    report = {"ks": list(ks), "summary": summary, "queries": rows}
+    action_rows = [row for row in rows if row.get("action_metrics")]
+    action_summary = {
+        "evaluations": len(action_rows),
+        "metrics": mean_metrics([row["action_metrics"] for row in action_rows]),
+    }
+    no_action_rows = [row for row in action_rows if row["no_action_conflict"]]
+    no_action_summary = {
+        "evaluations": len(no_action_rows),
+        "metrics": mean_metrics([row["no_action_conflict"] for row in no_action_rows]),
+    }
+    candidate_rows = [row for row in rows if row.get("candidate_metrics")]
+    candidate_summary = {
+        "evaluations": len(candidate_rows),
+        "metrics": mean_metrics([row["candidate_metrics"] for row in candidate_rows]),
+    }
+    breakdowns = {
+        "input_type": {
+            label: _summarize([row for row in rows if row["input_type"] == label])
+            for label in ("alert", "text_query")
+            if any(row["input_type"] == label for row in rows)
+        },
+        "task_type": {
+            label: _summarize([row for row in rows if row["task_type"] == label])
+            for label in ("actions", "knowledge", "mixed", "cases")
+            if any(row["task_type"] == label for row in rows)
+        },
+    }
+    report = {
+        "ks": list(ks),
+        "summary": summary,
+        "breakdowns": breakdowns,
+        "action_metrics": action_summary,
+        "no_action_conflict": no_action_summary,
+        "candidate_metrics": candidate_summary,
+        "latency": summarize_latency([row["latency_ms"] for row in latency_rows]),
+        "latency_by_input_type": {
+            label: summarize_latency([
+                latency["latency_ms"]
+                for latency, query in zip(latency_rows, queries)
+                if ("alert" in query) == (label == "alert")
+            ])
+            for label in ("alert", "text_query")
+            if any(("alert" in query) == (label == "alert") for query in queries)
+        },
+        "query_latencies": latency_rows,
+        "queries": rows,
+    }
     if diagnostics_retrieve is not None:
         report["diagnostics"] = diagnostic_rows
     return report
@@ -337,6 +426,8 @@ def _format_query_diagnostic(
     return {
         "query_id": query["id"],
         "candidate_count": kb_trace.get("candidate_count", len(candidates)),
+        "candidate_recall": candidate_recall(candidates, judgments),
+        "reranked_recall": candidate_recall(candidates, judgments, reranked_only=True),
         "category_added": kb_trace.get("category_added", 0),
         "category_lexical_added": kb_trace.get("category_lexical_added", 0),
         "attack_expansion_added": kb_trace.get("attack_expansion_added", 0),
@@ -354,6 +445,8 @@ def _describe(judgment: Mapping[str, Any]) -> str:
 
 def format_report(report: Mapping[str, Any]) -> str:
     ks = report["ks"]
+    deepest = max(ks)
+    shallowest = min(ks)
     lines: List[str] = []
     for name, section in report["summary"].items():
         lines.append(f"{LABELS[name]} - {section['evaluations']} evaluations")
@@ -362,6 +455,63 @@ def format_report(report: Mapping[str, Any]) -> str:
             values = "".join(f"{section['metrics'][f'{metric}@{k}']:>8.3f}" for k in ks)
             lines.append(f"  {metric:<11}{values}")
         lines.append(f"  {'mrr':<11}{section['metrics']['mrr']:>8.3f}")
+        lines.append("")
+
+    action_summary = report.get("action_metrics", {})
+    if action_summary.get("evaluations"):
+        lines.append(f"Action retrieval - {action_summary['evaluations']} evaluations")
+        for metric in ("action_precision", "action_recall", "action_f1"):
+            values = "".join(
+                f"{action_summary['metrics'][f'{metric}@{k}']:>8.3f}" for k in ks
+            )
+            lines.append(f"  {metric:<16}{values}")
+        lines.append("")
+
+    conflict_summary = report.get("no_action_conflict", {})
+    if conflict_summary.get("evaluations"):
+        values = "".join(
+            f"{conflict_summary['metrics'][f'no_action_conflict_rate@{k}']:>8.3f}"
+            for k in ks
+        )
+        lines.append(
+            f"No-action conflict proxy - {conflict_summary['evaluations']} evaluations"
+        )
+        lines.append(" " * 13 + "".join(f"{'@' + str(k):>8}" for k in ks))
+        lines.append(f"  {'conflict rate':<16}{values}")
+        lines.append("")
+
+    candidate_summary = report.get("candidate_metrics", {})
+    if candidate_summary.get("evaluations"):
+        metrics = candidate_summary["metrics"]
+        lines.append(
+            f"Candidate coverage (KB diagnostics) - {candidate_summary['evaluations']} evaluations"
+        )
+        lines.append(
+            f"  pool recall: {metrics['candidate_recall']:.3f}; "
+            f"reranked recall: {metrics['reranked_recall']:.3f}"
+        )
+        lines.append("")
+
+    latency = report.get("latency", {})
+    if latency.get("queries"):
+        lines.append(
+            "End-to-end retrieval latency "
+            f"({latency['queries']} queries; ms): mean {latency['mean_ms']:.1f}, "
+            f"median {latency['median_ms']:.1f}, p95 {latency['p95_ms']:.1f}"
+        )
+        lines.append("")
+
+    breakdowns = report.get("breakdowns", {})
+    for dimension, groups in breakdowns.items():
+        lines.append(f"Breakdown by {dimension}:")
+        for label, section in groups.items():
+            lines.append(
+                f"  {label} ({section['evaluations']} evaluations): "
+                f"hit@{shallowest}={section['metrics'][f'hit@{shallowest}']:.3f}, "
+                f"recall@{deepest}={section['metrics'][f'recall@{deepest}']:.3f}, "
+                f"nDCG@{deepest}={section['metrics'][f'ndcg@{deepest}']:.3f}, "
+                f"MRR={section['metrics']['mrr']:.3f}"
+            )
         lines.append("")
 
     misses = [row for row in report["queries"] if row["missed"]]

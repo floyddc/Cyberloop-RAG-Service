@@ -320,7 +320,7 @@ def _retrieve(
     # --- 1. Dense vector search ---
     results = collection.query(
         query_embeddings=[embedding],
-        n_results=min(max(top_k, config.RERANK_CANDIDATES), total),
+        n_results=min(max(top_k, config.VECTOR_SEARCH_CANDIDATES), total),
         where=where,
     )
     known: set = set()

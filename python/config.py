@@ -16,8 +16,8 @@ EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE", "cpu")    # cpu | cuda | a
 RERANKER_DEVICE = os.environ.get("RERANKER_DEVICE", "cpu")      # cpu | cuda | auto (torch is required for cuda)
 CHUNK_SIZE = 300
 CHUNK_OVERLAP = 50
-TOP_K = 5
-RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "30"))
+TOP_K = 10
+VECTOR_SEARCH_CANDIDATES = int(os.environ.get("VECTOR_SEARCH_CANDIDATES", "30"))
 RETRIEVAL_DIAGNOSTICS_ENABLED = os.environ.get(
     "RETRIEVAL_DIAGNOSTICS_ENABLED", ""
 ).strip().lower() in {"1", "true", "yes"}

@@ -29,7 +29,6 @@ def _action_content(action: Dict[str, Any]) -> str:
 
 
 def _split_actions_catalog(row: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return one row per catalog action so each action gets its own retrievable chunk."""
     try:
         actions = json.loads(row["content"]).get("actions")
     except (ValueError, AttributeError):

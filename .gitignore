@@ -10,3 +10,7 @@ knowledge/indices/*
 todo.md
 report*
 *.pdf
+diagrams/*
+benchmark.md
+appunti.md
+*-results.jsonl

@@ -104,7 +104,7 @@ async def lifespan(_: FastAPI):
     finally:
         _models_ready = False
 
-app = FastAPI(title="Cyberloop RAG service", lifespan=lifespan)
+app = FastAPI(title="RAG service", lifespan=lifespan)
 
 
 def _require_ready() -> None:

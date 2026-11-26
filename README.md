@@ -1,6 +1,6 @@
-# Cyberloop RAG Service
+# RAG Service
 
-Servizio RAG da integrare nell'infrastruttura Cyberloop. Tramite API, viene chiamato un Retrieve Agent che recupera contesto utile partendo dall'alert in input, 
+Tramite API, viene chiamato un Retrieve Agent che recupera contesto utile partendo dall'alert in input, 
 servendosi del RAG (Retrieve Augmented Generation). Il resto dell'infrastruttura (Triage, Action Planning, Contenimento) non è incluso nella seguente repo.
 
 - [Terminale 1](#terminale-1)
@@ -29,8 +29,8 @@ Host *
 
 ### Setup
 ```powershell
-git clone https://github.com/floyddc/Cyberloop-RAG-Service.git
-cd Cyberloop-RAG-Service
+git clone https://github.com/floyddc/RAG-Service.git
+cd RAG-Service
 chmod +x *
 pip install -r python/requirements.txt
 echo "
@@ -55,7 +55,7 @@ docker compose up
 
 ### Popolare DB con datasets e indicizzare knowledge base
 ```powershell
-cd Cyberloop-RAG-Service
+cd RAG-Service
 ./seed_DB.sh
 ./build_index.sh
 ```
